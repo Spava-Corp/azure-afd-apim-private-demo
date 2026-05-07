@@ -1,0 +1,13 @@
+apiVersion: v2
+name: internal-lb
+description: Azure internal LoadBalancer that fronts demo backends for Private Link Service
+type: application
+version: 0.1.0
+appVersion: "1.0"
+keywords:
+  - load-balancer
+  - internal
+  - azure
+  - private-link
+maintainers:
+  - name: SecOps Squad

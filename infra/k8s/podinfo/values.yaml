@@ -1,0 +1,58 @@
+# Podinfo Helm chart values
+# stefanprodan/podinfo — lightweight Go microservice for demo/testing
+
+replicaCount: 2
+
+image:
+  repository: ghcr.io/stefanprodan/podinfo
+  tag: latest
+  pullPolicy: Always
+
+service:
+  type: ClusterIP
+  port: 9898
+  targetPort: 9898
+
+resources:
+  requests:
+    memory: "64Mi"
+    cpu: "100m"
+  limits:
+    memory: "128Mi"
+    cpu: "200m"
+
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 70
+
+# TLS configuration for mTLS with APIM
+# Generate certs using: infra/modules/aks/generate-self-signed-cert.sh
+# Then base64-encode server.crt and server.key:
+#   cat certs/server.crt | base64 -w0
+#   cat certs/server.key | base64 -w0
+tls:
+  enabled: true
+  secretName: podinfo-tls
+  # Placeholder values — replace with output from generate-self-signed-cert.sh
+  crt: ""  # base64-encoded server.crt
+  key: ""  # base64-encoded server.key
+
+healthcheck:
+  liveness:
+    path: /healthz
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
+  readiness:
+    path: /readyz
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

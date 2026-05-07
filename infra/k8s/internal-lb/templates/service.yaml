@@ -1,0 +1,61 @@
+# Internal Load Balancer Service
+# This is a multi-port LoadBalancer that routes to both backend services.
+# Because Kubernetes LoadBalancer services can only target pods (not other services),
+# we use an nginx/envoy proxy OR separate LB services per backend.
+#
+# Simplest approach for this demo: one LB service per backend port, using
+# externalTrafficPolicy and selectors that match each backend's pods directly.
+# However, a single LB IP is required for Private Link Service.
+#
+# Solution: Use a single multi-port LB with a shared selector label, and both
+# backends must have the shared label. The deploy.sh script labels pods accordingly.
+# Alternative: Use an NGINX ingress controller as the LB target.
+#
+# For this demo, we create TWO LoadBalancer services that share the same
+# Azure internal LB via the same subnet annotation. Azure merges them into
+# one frontend IP when using the same internal LB subnet.
+
+---
+# Petstore port on the internal LB
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.service.name }}-petstore
+  labels:
+    {{- include "internal-lb.labels" . | nindent 4 }}
+    app.kubernetes.io/component: petstore-lb
+  annotations:
+    {{- range $key, $value := .Values.service.annotations }}
+    {{ $key }}: {{ $value | quote }}
+    {{- end }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: {{ .Values.ports.petstore.port }}
+      targetPort: {{ .Values.ports.petstore.targetPort }}
+      protocol: {{ .Values.ports.petstore.protocol }}
+      name: petstore
+  selector:
+    app.kubernetes.io/name: petstore
+---
+# Podinfo port on the internal LB
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.service.name }}-podinfo
+  labels:
+    {{- include "internal-lb.labels" . | nindent 4 }}
+    app.kubernetes.io/component: podinfo-lb
+  annotations:
+    {{- range $key, $value := .Values.service.annotations }}
+    {{ $key }}: {{ $value | quote }}
+    {{- end }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: {{ .Values.ports.podinfo.port }}
+      targetPort: {{ .Values.ports.podinfo.targetPort }}
+      protocol: {{ .Values.ports.podinfo.protocol }}
+      name: podinfo
+  selector:
+    app.kubernetes.io/name: podinfo

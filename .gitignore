@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Squad internals (not for public repo)
+.squad/
+
+# Build artifacts
+*.zip
+zip-base64.txt
+
+# Terraform state (if used)
+*.tfstate
+*.tfstate.backup
+.terraform/

@@ -1,0 +1,35 @@
+# Internal Load Balancer values
+# This creates a single Azure internal LB that the Private Link Service fronts.
+# Routes traffic to both backend services by port.
+
+service:
+  name: demo-internal-lb
+  type: LoadBalancer
+  annotations:
+    # Required: makes this an internal (non-public) Azure LB
+    "service.beta.kubernetes.io/azure-load-balancer-internal": "true"
+    # Optional: place LB in a specific subnet (must match AKS VNet subnet)
+    # "service.beta.kubernetes.io/azure-load-balancer-internal-subnet": "aks-internal-lb-subnet"
+
+# Port mappings — each port routes to a different backend ClusterIP service
+ports:
+  petstore:
+    port: 8080
+    targetPort: 8080
+    protocol: TCP
+  podinfo:
+    port: 9898
+    targetPort: 9898
+    protocol: TCP
+
+# Backend service references (must match deployed ClusterIP service names)
+backends:
+  petstore:
+    serviceName: demo-petstore
+    servicePort: 8080
+  podinfo:
+    serviceName: demo-podinfo
+    servicePort: 9898
+
+# Namespace where backends are deployed
+namespace: demo-apis

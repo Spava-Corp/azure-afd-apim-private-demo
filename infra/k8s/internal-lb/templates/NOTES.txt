@@ -1,0 +1,16 @@
+⚖️ Internal Load Balancer deployed!
+
+Services created:
+  - {{ .Values.service.name }}-petstore (port {{ .Values.ports.petstore.port }})
+  - {{ .Values.service.name }}-podinfo (port {{ .Values.ports.podinfo.port }})
+
+Get the internal LB IP (may take 1-2 minutes to provision):
+  kubectl get svc {{ .Values.service.name }}-petstore -n {{ .Release.Namespace }} -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
+
+This IP is used by:
+  1. Azure Private Link Service (fronts the LB)
+  2. APIM backend configuration (connects via PLS)
+
+Verify connectivity:
+  kubectl run curl --image=curlimages/curl --rm -it -- curl http://<INTERNAL-IP>:{{ .Values.ports.petstore.port }}/api/v3/openapi.json
+  kubectl run curl --image=curlimages/curl --rm -it -- curl http://<INTERNAL-IP>:{{ .Values.ports.podinfo.port }}/healthz

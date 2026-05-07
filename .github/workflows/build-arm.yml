@@ -1,0 +1,30 @@
+name: Build ARM Template
+
+on:
+  push:
+    branches: [main]
+    paths: ['infra/**']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Bicep CLI
+        run: az bicep install
+
+      - name: Build ARM template from Bicep
+        run: az bicep build --file infra/main.bicep --outfile infra/main.json
+
+      - name: Commit ARM template
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add infra/main.json
+          git diff --cached --quiet || git commit -m "chore: rebuild ARM template from Bicep"
+          git push

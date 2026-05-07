@@ -1,0 +1,12 @@
+apiVersion: v2
+name: podinfo
+description: Podinfo demo backend for AKS — lightweight Go microservice
+type: application
+version: 0.1.0
+appVersion: "6.x"
+keywords:
+  - podinfo
+  - microservice
+  - demo
+maintainers:
+  - name: SecOps Squad

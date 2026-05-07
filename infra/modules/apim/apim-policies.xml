@@ -1,0 +1,136 @@
+<!--
+  APIM Inbound Policy — AFD → APIM → AKS Private Architecture
+  Author: Kima (SecOps Engineer)
+  Date: 2026-05-07
+
+  Purpose:
+  1. Validates X-Azure-FDID header to prevent origin bypass attacks
+  2. Returns 403 for direct access attempts (bypassing AFD)
+  3. Sets CORS headers for demo convenience
+  4. Placeholder for mTLS client certificate to backend
+
+  Usage:
+  - Set the named value "afd-profile-id" in APIM to your AFD profile's unique ID
+  - Apply this policy at the "All APIs" level for global enforcement
+  - Per-API policies can override/extend specific sections
+-->
+<policies>
+    <inbound>
+        <base />
+
+        <!--
+          ================================================================
+          SECURITY: Azure Front Door ID Validation
+          ================================================================
+          WHY: Even though APIM has no public IP (internal mode), this prevents
+          bypass if network controls are ever misconfigured. Belt-and-suspenders
+          with the WAF rule — WAF blocks at edge, APIM blocks at origin.
+
+          HOW: AFD automatically injects X-Azure-FDID on every request.
+          We validate it matches OUR specific AFD profile instance.
+
+          MITRE: Mitigates T1190 (Exploit Public-Facing Application) by ensuring
+          only traffic through our WAF-protected front door reaches the API.
+        -->
+        <check-header name="X-Azure-FDID" failed-check-httpcode="403" failed-check-error-message="Access denied. Direct origin access is not permitted." ignore-case="true">
+            <value>{{afd-profile-id}}</value>
+        </check-header>
+
+        <!--
+          ================================================================
+          CORS: Cross-Origin Resource Sharing (Demo Mode)
+          ================================================================
+          WHY: Allows browser-based demos and dev portals to call the API.
+          In production, restrict allowed-origins to known domains only.
+        -->
+        <cors allow-credentials="false">
+            <allowed-origins>
+                <origin>*</origin>
+            </allowed-origins>
+            <allowed-methods preflight-result-max-age="300">
+                <method>GET</method>
+                <method>POST</method>
+                <method>PUT</method>
+                <method>DELETE</method>
+                <method>PATCH</method>
+                <method>OPTIONS</method>
+            </allowed-methods>
+            <allowed-headers>
+                <header>*</header>
+            </allowed-headers>
+            <expose-headers>
+                <header>*</header>
+            </expose-headers>
+        </cors>
+
+        <!--
+          ================================================================
+          RATE LIMITING: Per-subscription throttling
+          ================================================================
+          WHY: Secondary rate limit at APIM level (AFD WAF does per-IP).
+          This does per-subscription-key limiting for authenticated callers.
+        -->
+        <rate-limit-by-key calls="100" renewal-period="60"
+                          counter-key="@(context.Subscription?.Key ?? context.Request.IpAddress)"
+                          increment-condition="@(context.Response.StatusCode >= 200 && context.Response.StatusCode < 400)" />
+
+    </inbound>
+
+    <backend>
+        <base />
+
+        <!--
+          ================================================================
+          mTLS CLIENT CERTIFICATE (Future — currently demo mode)
+          ================================================================
+          WHY: In production, APIM should present a client certificate to the
+          AKS backend to prove its identity (zero-trust, mutual authentication).
+          The backend validates the cert before processing requests.
+
+          HOW TO ENABLE:
+          1. Generate client cert (see infra/modules/aks/generate-self-signed-cert.sh)
+          2. Upload to Key Vault
+          3. Reference in APIM certificate store
+          4. Uncomment the line below:
+
+          <authentication-certificate certificate-id="apim-client-cert" />
+
+          For demo mode, APIM connects to AKS backend without client cert.
+          AKS backend uses self-signed server TLS; APIM skips backend cert validation.
+        -->
+    </backend>
+
+    <outbound>
+        <base />
+
+        <!--
+          Remove internal headers that leak architecture info to clients.
+          Defense against reconnaissance (MITRE T1592 - Gather Victim Host Information).
+        -->
+        <set-header name="X-Powered-By" exists-action="delete" />
+        <set-header name="X-AspNet-Version" exists-action="delete" />
+        <set-header name="Server" exists-action="override">
+            <value>API Gateway</value>
+        </set-header>
+    </outbound>
+
+    <on-error>
+        <base />
+
+        <!--
+          Generic error response — never expose internal errors to clients.
+          Log the full error internally via Application Insights.
+        -->
+        <set-header name="Content-Type" exists-action="override">
+            <value>application/json</value>
+        </set-header>
+        <set-body>@{
+            return new JObject(
+                new JProperty("error", new JObject(
+                    new JProperty("code", context.Response.StatusCode.ToString()),
+                    new JProperty("message", "An error occurred processing your request.")
+                ))
+            ).ToString();
+        }</set-body>
+    </on-error>
+</policies>

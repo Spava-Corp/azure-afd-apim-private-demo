@@ -1,0 +1,14 @@
+🐾 Petstore deployed successfully!
+
+Service: {{ include "petstore.fullname" . }}
+Port:    {{ .Values.service.port }}
+Replicas: {{ .Values.replicaCount }}
+
+Verify with:
+  kubectl get pods -l app.kubernetes.io/name={{ include "petstore.name" . }} -n {{ .Release.Namespace }}
+  kubectl port-forward svc/{{ include "petstore.fullname" . }} 8080:{{ .Values.service.port }} -n {{ .Release.Namespace }}
+
+Then open: http://localhost:8080/api/v3/openapi.json
+
+OpenAPI spec (for APIM import):
+  http://{{ include "petstore.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.service.port }}/api/v3/openapi.json

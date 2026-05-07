@@ -1,0 +1,13 @@
+apiVersion: v2
+name: petstore
+description: Swagger Petstore v3 demo backend for AKS
+type: application
+version: 0.1.0
+appVersion: "3.0"
+keywords:
+  - petstore
+  - swagger
+  - openapi
+  - demo
+maintainers:
+  - name: SecOps Squad
