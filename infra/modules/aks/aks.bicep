@@ -17,7 +17,7 @@ param aksSubnetId string
 param kubernetesVersion string = '1.29'
 
 @description('VM size for the system node pool')
-param systemNodeVmSize string = 'Standard_DS2_v2'
+param systemNodeVmSize string = 'Standard_D2s_v5'
 
 @description('Number of nodes in the system node pool')
 @minValue(1)

@@ -24,7 +24,7 @@ param apimSkuName = 'Developer'
 
 // AKS
 param kubernetesVersion = '1.34'
-param aksNodeVmSize = 'Standard_DS2_v2'
+param aksNodeVmSize = 'Standard_D2s_v5'
 param aksNodeCount = 2
 
 // Monitoring

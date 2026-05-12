@@ -63,7 +63,7 @@ param apimSkuName string = 'Developer'
 param kubernetesVersion string = '1.34'
 
 @description('AKS system node pool VM size')
-param aksNodeVmSize string = 'Standard_DS2_v2'
+param aksNodeVmSize string = 'Standard_D2s_v5'
 
 @description('AKS system node count')
 param aksNodeCount int = 2

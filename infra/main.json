@@ -115,7 +115,7 @@
     },
     "aksNodeVmSize": {
       "type": "string",
-      "defaultValue": "Standard_DS2_v2",
+      "defaultValue": "Standard_D2s_v5",
       "metadata": {
         "description": "AKS system node pool VM size"
       }
@@ -1377,7 +1377,7 @@
             },
             "systemNodeVmSize": {
               "type": "string",
-              "defaultValue": "Standard_DS2_v2",
+              "defaultValue": "Standard_D2s_v5",
               "metadata": {
                 "description": "VM size for the system node pool"
               }
