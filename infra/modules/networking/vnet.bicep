@@ -11,19 +11,19 @@ param prefix string
 param environment string
 
 @description('VNet address space')
-param vnetAddressPrefix string = '10.0.0.0/16'
+param vnetAddressPrefix string = '10.1.0.0/16'
 
 @description('APIM subnet address prefix')
-param apimSubnetPrefix string = '10.0.1.0/24'
+param apimSubnetPrefix string = '10.1.1.0/24'
 
 @description('AKS subnet address prefix')
-param aksSubnetPrefix string = '10.0.2.0/22'
+param aksSubnetPrefix string = '10.1.4.0/22'
 
 @description('Private Endpoints subnet address prefix')
-param privateEndpointSubnetPrefix string = '10.0.6.0/24'
+param privateEndpointSubnetPrefix string = '10.1.8.0/24'
 
 @description('Bastion subnet address prefix (must be named AzureBastionSubnet)')
-param bastionSubnetPrefix string = '10.0.7.0/26'
+param bastionSubnetPrefix string = '10.1.9.0/26'
 
 @description('Tags to apply to resources')
 param tags object = {}
@@ -76,7 +76,7 @@ resource apimNsg 'Microsoft.Network/networkSecurityGroups@2023-11-01' = {
           protocol: 'Tcp'
           sourcePortRange: '*'
           destinationPortRange: '443'
-          sourceAddressPrefix: 'VirtualNetwork'
+          sourceAddressPrefix: '10.1.8.0/24'
           destinationAddressPrefix: 'VirtualNetwork'
         }
       }
@@ -119,6 +119,32 @@ resource apimNsg 'Microsoft.Network/networkSecurityGroups@2023-11-01' = {
           destinationAddressPrefix: 'AzureKeyVault'
         }
       }
+      {
+        name: 'Deny-All-Inbound'
+        properties: {
+          priority: 4000
+          direction: 'Inbound'
+          access: 'Deny'
+          protocol: '*'
+          sourcePortRange: '*'
+          destinationPortRange: '*'
+          sourceAddressPrefix: '*'
+          destinationAddressPrefix: '*'
+        }
+      }
+      {
+        name: 'Deny-All-Outbound'
+        properties: {
+          priority: 4000
+          direction: 'Outbound'
+          access: 'Deny'
+          protocol: '*'
+          sourcePortRange: '*'
+          destinationPortRange: '*'
+          sourceAddressPrefix: '*'
+          destinationAddressPrefix: '*'
+        }
+      }
     ]
   }
 }
@@ -156,6 +182,123 @@ resource aksNsg 'Microsoft.Network/networkSecurityGroups@2023-11-01' = {
           destinationAddressPrefix: '*'
         }
       }
+      {
+        name: 'Allow-ACR-Outbound'
+        properties: {
+          priority: 110
+          direction: 'Outbound'
+          access: 'Allow'
+          protocol: 'Tcp'
+          sourcePortRange: '*'
+          destinationPortRange: '443'
+          sourceAddressPrefix: 'VirtualNetwork'
+          destinationAddressPrefix: 'AzureContainerRegistry'
+        }
+      }
+      {
+        name: 'Allow-AAD-Outbound'
+        properties: {
+          priority: 120
+          direction: 'Outbound'
+          access: 'Allow'
+          protocol: 'Tcp'
+          sourcePortRange: '*'
+          destinationPortRange: '443'
+          sourceAddressPrefix: 'VirtualNetwork'
+          destinationAddressPrefix: 'AzureActiveDirectory'
+        }
+      }
+      {
+        name: 'Allow-AzureMonitor-Outbound'
+        properties: {
+          priority: 130
+          direction: 'Outbound'
+          access: 'Allow'
+          protocol: 'Tcp'
+          sourcePortRange: '*'
+          destinationPortRange: '443'
+          sourceAddressPrefix: 'VirtualNetwork'
+          destinationAddressPrefix: 'AzureMonitor'
+        }
+      }
+      {
+        name: 'Allow-AzureCloud-Outbound'
+        properties: {
+          priority: 140
+          direction: 'Outbound'
+          access: 'Allow'
+          protocol: 'Tcp'
+          sourcePortRange: '*'
+          destinationPortRanges: ['443', '9000']
+          sourceAddressPrefix: 'VirtualNetwork'
+          destinationAddressPrefix: 'AzureCloud'
+        }
+      }
+      {
+        name: 'Allow-AzureCloud-UDP-Outbound'
+        properties: {
+          priority: 150
+          direction: 'Outbound'
+          access: 'Allow'
+          protocol: 'Udp'
+          sourcePortRange: '*'
+          destinationPortRange: '1194'
+          sourceAddressPrefix: 'VirtualNetwork'
+          destinationAddressPrefix: 'AzureCloud'
+        }
+      }
+      {
+        name: 'Allow-DNS-Outbound'
+        properties: {
+          priority: 160
+          direction: 'Outbound'
+          access: 'Allow'
+          protocol: '*'
+          sourcePortRange: '*'
+          destinationPortRange: '53'
+          sourceAddressPrefix: 'VirtualNetwork'
+          destinationAddressPrefix: '*'
+        }
+      }
+      {
+        name: 'Allow-HTTP-Outbound'
+        properties: {
+          priority: 170
+          direction: 'Outbound'
+          access: 'Allow'
+          protocol: 'Tcp'
+          sourcePortRange: '*'
+          destinationPortRange: '80'
+          sourceAddressPrefix: 'VirtualNetwork'
+          destinationAddressPrefix: 'Internet'
+        }
+      }
+      {
+        name: 'Allow-NTP-Outbound'
+        properties: {
+          priority: 180
+          direction: 'Outbound'
+          access: 'Allow'
+          protocol: 'Udp'
+          sourcePortRange: '*'
+          destinationPortRange: '123'
+          sourceAddressPrefix: 'VirtualNetwork'
+          destinationAddressPrefix: '*'
+        }
+      }
+      {
+        name: 'Deny-All-Inbound'
+        properties: {
+          priority: 4000
+          direction: 'Inbound'
+          access: 'Deny'
+          protocol: '*'
+          sourcePortRange: '*'
+          destinationPortRange: '*'
+          sourceAddressPrefix: '*'
+          destinationAddressPrefix: '*'
+        }
+      }
     ]
   }
 }
@@ -166,7 +309,47 @@ resource peNsg 'Microsoft.Network/networkSecurityGroups@2023-11-01' = {
   location: location
   tags: tags
   properties: {
-    securityRules: []
+    securityRules: [
+      {
+        name: 'Allow-HTTPS-From-VNet'
+        properties: {
+          priority: 100
+          direction: 'Inbound'
+          access: 'Allow'
+          protocol: 'Tcp'
+          sourcePortRange: '*'
+          destinationPortRange: '443'
+          sourceAddressPrefix: 'VirtualNetwork'
+          destinationAddressPrefix: 'VirtualNetwork'
+        }
+      }
+      {
+        name: 'Deny-All-Inbound'
+        properties: {
+          priority: 4000
+          direction: 'Inbound'
+          access: 'Deny'
+          protocol: '*'
+          sourcePortRange: '*'
+          destinationPortRange: '*'
+          sourceAddressPrefix: '*'
+          destinationAddressPrefix: '*'
+        }
+      }
+      {
+        name: 'Deny-All-Outbound'
+        properties: {
+          priority: 4000
+          direction: 'Outbound'
+          access: 'Deny'
+          protocol: '*'
+          sourcePortRange: '*'
+          destinationPortRange: '*'
+          sourceAddressPrefix: '*'
+          destinationAddressPrefix: '*'
+        }
+      }
+    ]
   }
 }
 
@@ -217,6 +400,19 @@ resource bastionNsg 'Microsoft.Network/networkSecurityGroups@2023-11-01' = {
         }
       }
       {
+        name: 'Allow-BastionHostCommunication-Inbound'
+        properties: {
+          priority: 130
+          direction: 'Inbound'
+          access: 'Allow'
+          protocol: '*'
+          sourcePortRange: '*'
+          destinationPortRanges: ['8080', '5701']
+          sourceAddressPrefix: 'VirtualNetwork'
+          destinationAddressPrefix: 'VirtualNetwork'
+        }
+      }
+      {
         name: 'Allow-SSH-RDP-Outbound'
         properties: {
           priority: 100
@@ -240,6 +436,58 @@ resource bastionNsg 'Microsoft.Network/networkSecurityGroups@2023-11-01' = {
           destinationPortRange: '443'
           sourceAddressPrefix: '*'
           destinationAddressPrefix: 'AzureCloud'
+        }
+      }
+      {
+        name: 'Allow-BastionHostCommunication-Outbound'
+        properties: {
+          priority: 120
+          direction: 'Outbound'
+          access: 'Allow'
+          protocol: '*'
+          sourcePortRange: '*'
+          destinationPortRanges: ['8080', '5701']
+          sourceAddressPrefix: 'VirtualNetwork'
+          destinationAddressPrefix: 'VirtualNetwork'
+        }
+      }
+      {
+        name: 'Allow-GetSessionInformation-Outbound'
+        properties: {
+          priority: 130
+          direction: 'Outbound'
+          access: 'Allow'
+          protocol: '*'
+          sourcePortRange: '*'
+          destinationPortRange: '80'
+          sourceAddressPrefix: '*'
+          destinationAddressPrefix: 'Internet'
+        }
+      }
+      {
+        name: 'Deny-All-Inbound'
+        properties: {
+          priority: 4000
+          direction: 'Inbound'
+          access: 'Deny'
+          protocol: '*'
+          sourcePortRange: '*'
+          destinationPortRange: '*'
+          sourceAddressPrefix: '*'
+          destinationAddressPrefix: '*'
+        }
+      }
+      {
+        name: 'Deny-All-Outbound'
+        properties: {
+          priority: 4000
+          direction: 'Outbound'
+          access: 'Deny'
+          protocol: '*'
+          sourcePortRange: '*'
+          destinationPortRange: '*'
+          sourceAddressPrefix: '*'
+          destinationAddressPrefix: '*'
         }
       }
     ]

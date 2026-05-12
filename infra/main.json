@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.42.1.51946",
-      "templateHash": "13508609476464064050"
+      "templateHash": "6216351097394470035"
     }
   },
   "parameters": {
@@ -48,35 +48,35 @@
     },
     "vnetAddressPrefix": {
       "type": "string",
-      "defaultValue": "10.0.0.0/16",
+      "defaultValue": "10.1.0.0/16",
       "metadata": {
         "description": "VNet address space"
       }
     },
     "apimSubnetPrefix": {
       "type": "string",
-      "defaultValue": "10.0.1.0/24",
+      "defaultValue": "10.1.1.0/24",
       "metadata": {
         "description": "APIM subnet address prefix"
       }
     },
     "aksSubnetPrefix": {
       "type": "string",
-      "defaultValue": "10.0.2.0/22",
+      "defaultValue": "10.1.4.0/22",
       "metadata": {
         "description": "AKS subnet address prefix"
       }
     },
     "privateEndpointSubnetPrefix": {
       "type": "string",
-      "defaultValue": "10.0.6.0/24",
+      "defaultValue": "10.1.8.0/24",
       "metadata": {
         "description": "Private Endpoints subnet address prefix"
       }
     },
     "bastionSubnetPrefix": {
       "type": "string",
-      "defaultValue": "10.0.7.0/26",
+      "defaultValue": "10.1.9.0/26",
       "metadata": {
         "description": "Bastion subnet address prefix"
       }
@@ -108,7 +108,7 @@
     },
     "kubernetesVersion": {
       "type": "string",
-      "defaultValue": "1.29",
+      "defaultValue": "1.34",
       "metadata": {
         "description": "Kubernetes version"
       }
@@ -341,7 +341,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.42.1.51946",
-              "templateHash": "10425440035429936828"
+              "templateHash": "12650480053001397241"
             }
           },
           "parameters": {
@@ -365,35 +365,35 @@
             },
             "vnetAddressPrefix": {
               "type": "string",
-              "defaultValue": "10.0.0.0/16",
+              "defaultValue": "10.1.0.0/16",
               "metadata": {
                 "description": "VNet address space"
               }
             },
             "apimSubnetPrefix": {
               "type": "string",
-              "defaultValue": "10.0.1.0/24",
+              "defaultValue": "10.1.1.0/24",
               "metadata": {
                 "description": "APIM subnet address prefix"
               }
             },
             "aksSubnetPrefix": {
               "type": "string",
-              "defaultValue": "10.0.2.0/22",
+              "defaultValue": "10.1.4.0/22",
               "metadata": {
                 "description": "AKS subnet address prefix"
               }
             },
             "privateEndpointSubnetPrefix": {
               "type": "string",
-              "defaultValue": "10.0.6.0/24",
+              "defaultValue": "10.1.8.0/24",
               "metadata": {
                 "description": "Private Endpoints subnet address prefix"
               }
             },
             "bastionSubnetPrefix": {
               "type": "string",
-              "defaultValue": "10.0.7.0/26",
+              "defaultValue": "10.1.9.0/26",
               "metadata": {
                 "description": "Bastion subnet address prefix (must be named AzureBastionSubnet)"
               }
@@ -457,7 +457,7 @@
                       "protocol": "Tcp",
                       "sourcePortRange": "*",
                       "destinationPortRange": "443",
-                      "sourceAddressPrefix": "VirtualNetwork",
+                      "sourceAddressPrefix": "10.1.8.0/24",
                       "destinationAddressPrefix": "VirtualNetwork"
                     }
                   },
@@ -499,6 +499,32 @@
                       "sourceAddressPrefix": "VirtualNetwork",
                       "destinationAddressPrefix": "AzureKeyVault"
                     }
+                  },
+                  {
+                    "name": "Deny-All-Inbound",
+                    "properties": {
+                      "priority": 4000,
+                      "direction": "Inbound",
+                      "access": "Deny",
+                      "protocol": "*",
+                      "sourcePortRange": "*",
+                      "destinationPortRange": "*",
+                      "sourceAddressPrefix": "*",
+                      "destinationAddressPrefix": "*"
+                    }
+                  },
+                  {
+                    "name": "Deny-All-Outbound",
+                    "properties": {
+                      "priority": 4000,
+                      "direction": "Outbound",
+                      "access": "Deny",
+                      "protocol": "*",
+                      "sourcePortRange": "*",
+                      "destinationPortRange": "*",
+                      "sourceAddressPrefix": "*",
+                      "destinationAddressPrefix": "*"
+                    }
                   }
                 ]
               }
@@ -536,6 +562,126 @@
                       "sourceAddressPrefix": "AzureLoadBalancer",
                       "destinationAddressPrefix": "*"
                     }
+                  },
+                  {
+                    "name": "Allow-ACR-Outbound",
+                    "properties": {
+                      "priority": 110,
+                      "direction": "Outbound",
+                      "access": "Allow",
+                      "protocol": "Tcp",
+                      "sourcePortRange": "*",
+                      "destinationPortRange": "443",
+                      "sourceAddressPrefix": "VirtualNetwork",
+                      "destinationAddressPrefix": "AzureContainerRegistry"
+                    }
+                  },
+                  {
+                    "name": "Allow-AAD-Outbound",
+                    "properties": {
+                      "priority": 120,
+                      "direction": "Outbound",
+                      "access": "Allow",
+                      "protocol": "Tcp",
+                      "sourcePortRange": "*",
+                      "destinationPortRange": "443",
+                      "sourceAddressPrefix": "VirtualNetwork",
+                      "destinationAddressPrefix": "AzureActiveDirectory"
+                    }
+                  },
+                  {
+                    "name": "Allow-AzureMonitor-Outbound",
+                    "properties": {
+                      "priority": 130,
+                      "direction": "Outbound",
+                      "access": "Allow",
+                      "protocol": "Tcp",
+                      "sourcePortRange": "*",
+                      "destinationPortRange": "443",
+                      "sourceAddressPrefix": "VirtualNetwork",
+                      "destinationAddressPrefix": "AzureMonitor"
+                    }
+                  },
+                  {
+                    "name": "Allow-AzureCloud-Outbound",
+                    "properties": {
+                      "priority": 140,
+                      "direction": "Outbound",
+                      "access": "Allow",
+                      "protocol": "Tcp",
+                      "sourcePortRange": "*",
+                      "destinationPortRanges": [
+                        "443",
+                        "9000"
+                      ],
+                      "sourceAddressPrefix": "VirtualNetwork",
+                      "destinationAddressPrefix": "AzureCloud"
+                    }
+                  },
+                  {
+                    "name": "Allow-AzureCloud-UDP-Outbound",
+                    "properties": {
+                      "priority": 150,
+                      "direction": "Outbound",
+                      "access": "Allow",
+                      "protocol": "Udp",
+                      "sourcePortRange": "*",
+                      "destinationPortRange": "1194",
+                      "sourceAddressPrefix": "VirtualNetwork",
+                      "destinationAddressPrefix": "AzureCloud"
+                    }
+                  },
+                  {
+                    "name": "Allow-DNS-Outbound",
+                    "properties": {
+                      "priority": 160,
+                      "direction": "Outbound",
+                      "access": "Allow",
+                      "protocol": "*",
+                      "sourcePortRange": "*",
+                      "destinationPortRange": "53",
+                      "sourceAddressPrefix": "VirtualNetwork",
+                      "destinationAddressPrefix": "*"
+                    }
+                  },
+                  {
+                    "name": "Allow-HTTP-Outbound",
+                    "properties": {
+                      "priority": 170,
+                      "direction": "Outbound",
+                      "access": "Allow",
+                      "protocol": "Tcp",
+                      "sourcePortRange": "*",
+                      "destinationPortRange": "80",
+                      "sourceAddressPrefix": "VirtualNetwork",
+                      "destinationAddressPrefix": "Internet"
+                    }
+                  },
+                  {
+                    "name": "Allow-NTP-Outbound",
+                    "properties": {
+                      "priority": 180,
+                      "direction": "Outbound",
+                      "access": "Allow",
+                      "protocol": "Udp",
+                      "sourcePortRange": "*",
+                      "destinationPortRange": "123",
+                      "sourceAddressPrefix": "VirtualNetwork",
+                      "destinationAddressPrefix": "*"
+                    }
+                  },
+                  {
+                    "name": "Deny-All-Inbound",
+                    "properties": {
+                      "priority": 4000,
+                      "direction": "Inbound",
+                      "access": "Deny",
+                      "protocol": "*",
+                      "sourcePortRange": "*",
+                      "destinationPortRange": "*",
+                      "sourceAddressPrefix": "*",
+                      "destinationAddressPrefix": "*"
+                    }
                   }
                 ]
               }
@@ -547,7 +693,47 @@
               "location": "[parameters('location')]",
               "tags": "[parameters('tags')]",
               "properties": {
-                "securityRules": []
+                "securityRules": [
+                  {
+                    "name": "Allow-HTTPS-From-VNet",
+                    "properties": {
+                      "priority": 100,
+                      "direction": "Inbound",
+                      "access": "Allow",
+                      "protocol": "Tcp",
+                      "sourcePortRange": "*",
+                      "destinationPortRange": "443",
+                      "sourceAddressPrefix": "VirtualNetwork",
+                      "destinationAddressPrefix": "VirtualNetwork"
+                    }
+                  },
+                  {
+                    "name": "Deny-All-Inbound",
+                    "properties": {
+                      "priority": 4000,
+                      "direction": "Inbound",
+                      "access": "Deny",
+                      "protocol": "*",
+                      "sourcePortRange": "*",
+                      "destinationPortRange": "*",
+                      "sourceAddressPrefix": "*",
+                      "destinationAddressPrefix": "*"
+                    }
+                  },
+                  {
+                    "name": "Deny-All-Outbound",
+                    "properties": {
+                      "priority": 4000,
+                      "direction": "Outbound",
+                      "access": "Deny",
+                      "protocol": "*",
+                      "sourcePortRange": "*",
+                      "destinationPortRange": "*",
+                      "sourceAddressPrefix": "*",
+                      "destinationAddressPrefix": "*"
+                    }
+                  }
+                ]
               }
             },
             {
@@ -598,6 +784,22 @@
                     }
                   },
                   {
+                    "name": "Allow-BastionHostCommunication-Inbound",
+                    "properties": {
+                      "priority": 130,
+                      "direction": "Inbound",
+                      "access": "Allow",
+                      "protocol": "*",
+                      "sourcePortRange": "*",
+                      "destinationPortRanges": [
+                        "8080",
+                        "5701"
+                      ],
+                      "sourceAddressPrefix": "VirtualNetwork",
+                      "destinationAddressPrefix": "VirtualNetwork"
+                    }
+                  },
+                  {
                     "name": "Allow-SSH-RDP-Outbound",
                     "properties": {
                       "priority": 100,
@@ -624,6 +826,61 @@
                       "destinationPortRange": "443",
                       "sourceAddressPrefix": "*",
                       "destinationAddressPrefix": "AzureCloud"
+                    }
+                  },
+                  {
+                    "name": "Allow-BastionHostCommunication-Outbound",
+                    "properties": {
+                      "priority": 120,
+                      "direction": "Outbound",
+                      "access": "Allow",
+                      "protocol": "*",
+                      "sourcePortRange": "*",
+                      "destinationPortRanges": [
+                        "8080",
+                        "5701"
+                      ],
+                      "sourceAddressPrefix": "VirtualNetwork",
+                      "destinationAddressPrefix": "VirtualNetwork"
+                    }
+                  },
+                  {
+                    "name": "Allow-GetSessionInformation-Outbound",
+                    "properties": {
+                      "priority": 130,
+                      "direction": "Outbound",
+                      "access": "Allow",
+                      "protocol": "*",
+                      "sourcePortRange": "*",
+                      "destinationPortRange": "80",
+                      "sourceAddressPrefix": "*",
+                      "destinationAddressPrefix": "Internet"
+                    }
+                  },
+                  {
+                    "name": "Deny-All-Inbound",
+                    "properties": {
+                      "priority": 4000,
+                      "direction": "Inbound",
+                      "access": "Deny",
+                      "protocol": "*",
+                      "sourcePortRange": "*",
+                      "destinationPortRange": "*",
+                      "sourceAddressPrefix": "*",
+                      "destinationAddressPrefix": "*"
+                    }
+                  },
+                  {
+                    "name": "Deny-All-Outbound",
+                    "properties": {
+                      "priority": 4000,
+                      "direction": "Outbound",
+                      "access": "Deny",
+                      "protocol": "*",
+                      "sourcePortRange": "*",
+                      "destinationPortRange": "*",
+                      "sourceAddressPrefix": "*",
+                      "destinationAddressPrefix": "*"
                     }
                   }
                 ]
@@ -762,7 +1019,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.42.1.51946",
-              "templateHash": "688873288803031890"
+              "templateHash": "8902488565896534074"
             }
           },
           "parameters": {
@@ -826,6 +1083,29 @@
               "dependsOn": [
                 "[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.vaultcore.azure.net')]"
               ]
+            },
+            {
+              "type": "Microsoft.Network/privateDnsZones",
+              "apiVersion": "2020-06-01",
+              "name": "privatelink.westus2.azmk8s.io",
+              "location": "global",
+              "tags": "[parameters('tags')]"
+            },
+            {
+              "type": "Microsoft.Network/privateDnsZones/virtualNetworkLinks",
+              "apiVersion": "2020-06-01",
+              "name": "[format('{0}/{1}', 'privatelink.westus2.azmk8s.io', 'link-aks')]",
+              "location": "global",
+              "tags": "[parameters('tags')]",
+              "properties": {
+                "virtualNetwork": {
+                  "id": "[parameters('vnetId')]"
+                },
+                "registrationEnabled": false
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.westus2.azmk8s.io')]"
+              ]
             }
           ],
           "outputs": {
@@ -842,6 +1122,13 @@
                 "description": "Resource ID of the Key Vault private DNS zone"
               },
               "value": "[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.vaultcore.azure.net')]"
+            },
+            "aksDnsZoneId": {
+              "type": "string",
+              "metadata": {
+                "description": "Resource ID of the AKS private DNS zone"
+              },
+              "value": "[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.westus2.azmk8s.io')]"
             }
           }
         }
@@ -880,7 +1167,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.42.1.51946",
-              "templateHash": "14770071691907235118"
+              "templateHash": "7601883051760901723"
             }
           },
           "parameters": {
@@ -939,7 +1226,7 @@
             }
           },
           "variables": {
-            "keyVaultName": "[format('{0}-kv-{1}', parameters('prefix'), parameters('environment'))]"
+            "keyVaultName": "[format('{0}-kv-{1}-{2}', parameters('prefix'), parameters('environment'), substring(uniqueString(resourceGroup().id), 0, 6))]"
           },
           "resources": [
             {
@@ -1053,7 +1340,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.42.1.51946",
-              "templateHash": "4515273635874640148"
+              "templateHash": "1643501137304175561"
             }
           },
           "parameters": {
@@ -1147,8 +1434,8 @@
                 "networkProfile": {
                   "networkPlugin": "azure",
                   "networkPolicy": "calico",
-                  "serviceCidr": "10.1.0.0/16",
-                  "dnsServiceIP": "10.1.0.10",
+                  "serviceCidr": "10.250.0.0/16",
+                  "dnsServiceIP": "10.250.0.10",
                   "loadBalancerSku": "standard",
                   "outboundType": "loadBalancer"
                 },
@@ -1399,9 +1686,6 @@
           "skuName": {
             "value": "[parameters('apimSkuName')]"
           },
-          "apimSubnetId": {
-            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-networking'), '2025-04-01').outputs.apimSubnetId.value]"
-          },
           "workspaceId": {
             "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-log-analytics'), '2025-04-01').outputs.workspaceId.value]"
           },
@@ -1416,7 +1700,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.42.1.51946",
-              "templateHash": "3383148506777006067"
+              "templateHash": "3953317063486920565"
             }
           },
           "parameters": {
@@ -1469,12 +1753,6 @@
                 "description": "APIM SKU capacity (units)"
               }
             },
-            "apimSubnetId": {
-              "type": "string",
-              "metadata": {
-                "description": "Resource ID of the APIM subnet (required for VNet integration)"
-              }
-            },
             "workspaceId": {
               "type": "string",
               "metadata": {
@@ -1490,7 +1768,7 @@
             }
           },
           "variables": {
-            "apimName": "[format('{0}-apim-{1}', parameters('prefix'), parameters('environment'))]"
+            "apimName": "[format('{0}-apim-{1}-{2}', parameters('prefix'), parameters('environment'), substring(uniqueString(resourceGroup().id), 0, 6))]"
           },
           "resources": [
             {
@@ -1509,11 +1787,7 @@
               "properties": {
                 "publisherEmail": "[parameters('publisherEmail')]",
                 "publisherName": "[parameters('publisherName')]",
-                "virtualNetworkType": "Internal",
-                "virtualNetworkConfiguration": {
-                  "subnetResourceId": "[parameters('apimSubnetId')]"
-                },
-                "platformVersion": "stv2"
+                "virtualNetworkType": "None"
               }
             },
             {
@@ -1581,8 +1855,7 @@
         }
       },
       "dependsOn": [
-        "[resourceId('Microsoft.Resources/deployments', 'deploy-log-analytics')]",
-        "[resourceId('Microsoft.Resources/deployments', 'deploy-networking')]"
+        "[resourceId('Microsoft.Resources/deployments', 'deploy-log-analytics')]"
       ]
     },
     {
@@ -1782,7 +2055,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.42.1.51946",
-              "templateHash": "14770071691907235118"
+              "templateHash": "7601883051760901723"
             }
           },
           "parameters": {
@@ -1841,7 +2114,7 @@
             }
           },
           "variables": {
-            "keyVaultName": "[format('{0}-kv-{1}', parameters('prefix'), parameters('environment'))]"
+            "keyVaultName": "[format('{0}-kv-{1}-{2}', parameters('prefix'), parameters('environment'), substring(uniqueString(resourceGroup().id), 0, 6))]"
           },
           "resources": [
             {
@@ -2104,9 +2377,6 @@
           "wafPolicyId": {
             "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-waf-policy'), '2025-04-01').outputs.wafPolicyId.value]"
           },
-          "apimPrivateEndpointId": {
-            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-apim-private-endpoint'), '2025-04-01').outputs.privateEndpointId.value]"
-          },
           "apimHostname": {
             "value": "[format('{0}-apim-{1}.azure-api.net', parameters('prefix'), parameters('environment'))]"
           },
@@ -2124,7 +2394,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.42.1.51946",
-              "templateHash": "2518769449373284361"
+              "templateHash": "8902782067790093144"
             }
           },
           "parameters": {
@@ -2144,12 +2414,6 @@
               "type": "string",
               "metadata": {
                 "description": "Resource ID of the WAF policy to associate"
-              }
-            },
-            "apimPrivateEndpointId": {
-              "type": "string",
-              "metadata": {
-                "description": "Resource ID of the APIM private endpoint"
               }
             },
             "apimHostname": {
@@ -2173,8 +2437,8 @@
             }
           },
           "variables": {
-            "afdProfileName": "[format('{0}-afd-{1}', parameters('prefix'), parameters('environment'))]",
-            "endpointName": "[format('{0}-endpoint-{1}', parameters('prefix'), parameters('environment'))]"
+            "afdProfileName": "[format('{0}-afd-{1}-{2}', parameters('prefix'), parameters('environment'), substring(uniqueString(resourceGroup().id), 0, 6))]",
+            "endpointName": "[format('{0}-endpoint-{1}-{2}', parameters('prefix'), parameters('environment'), substring(uniqueString(resourceGroup().id), 0, 6))]"
           },
           "resources": [
             {
@@ -2335,7 +2599,6 @@
       },
       "dependsOn": [
         "[resourceId('Microsoft.Resources/deployments', 'deploy-apim')]",
-        "[resourceId('Microsoft.Resources/deployments', 'deploy-apim-private-endpoint')]",
         "[resourceId('Microsoft.Resources/deployments', 'deploy-waf-policy')]"
       ]
     }

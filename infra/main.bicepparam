@@ -1,28 +1,29 @@
 using './main.bicep'
 
-// ─── Dev Environment Defaults ─────────────────────────────────────────────────
+// ─── ESLZ Online Landing Zone — Dev Environment Defaults ──────────────────────
 // AFD Premium → APIM (Developer, Internal) → AKS (Private Link) Architecture
-// Region: West US 2 | Demo APIs: Swagger Petstore + Podinfo
+// Subscription: Spaidoso-LZ-Online | Region: West US 2
+// VNet: 10.1.0.0/16 (shifted to avoid ESLZ hub 10.0.0.0/16 collision)
 
 // Global
 param location = 'westus2'
 param prefix = 'demo'
 param environment = 'dev'
 
-// Networking
-param vnetAddressPrefix = '10.0.0.0/16'
-param apimSubnetPrefix = '10.0.1.0/24'
-param aksSubnetPrefix = '10.0.2.0/22'
-param privateEndpointSubnetPrefix = '10.0.6.0/24'
-param bastionSubnetPrefix = '10.0.7.0/26'
+// Networking — 10.1.x.x spoke range (ESLZ hub uses 10.0.0.0/16)
+param vnetAddressPrefix = '10.1.0.0/16'
+param apimSubnetPrefix = '10.1.1.0/24'
+param aksSubnetPrefix = '10.1.4.0/22'
+param privateEndpointSubnetPrefix = '10.1.8.0/24'
+param bastionSubnetPrefix = '10.1.9.0/26'
 
 // APIM
-param apimPublisherEmail = 'admin@contoso.com'
+param apimPublisherEmail = 'demo-admin@spaidoso.onmicrosoft.com'
 param apimPublisherName = 'SecOps Demo'
 param apimSkuName = 'Developer'
 
 // AKS
-param kubernetesVersion = '1.29'
+param kubernetesVersion = '1.34'
 param aksNodeVmSize = 'Standard_DS2_v2'
 param aksNodeCount = 2
 
