@@ -1,0 +1,231 @@
+# Decisions — ESLZ Deployment Analysis
+
+## 2026-05-12: ESLZ Deployment Decisions (MacReady Lead + Childs Networking)
+
+### Context
+- **Project:** azure-afd-apim-private-demo
+- **Deployment Target:** ESLZ demo tenant, Spaidoso Online Landing Zone
+- **Authors:** MacReady (Lead), Childs (Network/Security)
+- **Status:** DRAFT — Awaiting John's action items
+
+---
+
+## Tenant & Subscription
+
+| Item | Value | Note |
+|------|-------|------|
+| **ESLZ Tenant Display Name** | Spaidoso | |
+| **ESLZ Tenant ID** | `4d00acda-e258-43e1-bd90-9370a4d118e1` | Verified via CLI |
+| **Provided Tenant ID** | `ef4ecf0b-a160-444b-a405-ce3bf1f98752` | **Mismatch — John must clarify** |
+| **Target Subscription** | Spaidoso-LZ-Online | `966a8e3c-bd80-41dd-8910-506aab21e18b` |
+| **Subscription Type** | Online Landing Zone | For internet-facing workloads, no on-prem dependency |
+
+**HARD DEPENDENCY:** Clarify which tenant ID is correct before proceeding.
+
+---
+
+## Infrastructure Decisions
+
+### 1. VNet Address Space — CRITICAL CONFLICT
+
+**Current:** `10.0.0.0/16` (collides with standard ESLZ hub)  
+**Recommendation:** Change to `10.1.0.0/16` (non-overlapping, allows future hub peering)
+
+| Subnet | Current | Recommended | Size | Rationale |
+|--------|---------|-------------|------|-----------|
+| VNet | `10.0.0.0/16` | `10.1.0.0/16` | 65,536 IPs | Hub uses `10.0.0.0/16`; peering requires non-overlap |
+| APIM | `10.0.1.0/24` | `10.1.1.0/24` | 254 IPs | Developer SKU needs ~5, Standard/Premium more but `/24` covers all |
+| AKS | `10.0.2.0/22` | `10.1.2.0/22` | 1,022 IPs | ~250 pods + headroom (Azure CNI) |
+| Private Endpoints | `10.0.6.0/24` | `10.1.6.0/24` | 254 IPs | 254 PE capacity (APIM PE + KV PE + future) |
+| Bastion | `10.0.7.0/26` | `10.1.7.0/26` | 62 IPs | Azure minimum `/26` |
+
+**Status:** Pending update to `main.bicepparam` and `vnet.bicep` defaults.
+
+---
+
+### 2. Private DNS Zones
+
+**Current:** Local zones in spoke only (`privatelink.azure-api.net`, `privatelink.vaultcore.azure.net`)  
+**Recommendation:** Local zones for demo; parameterize for centralized (hub) zones in production
+
+**Missing zones identified:**
+- `privatelink.westus2.azmk8s.io` — **Required** for AKS private cluster API server DNS
+- `privatelink.azurecr.io` — Needed if using ACR for container images
+
+**Future enhancement:** Add optional parameter `existingPrivateDnsZoneId` to modules to support centralized zone strategy.
+
+---
+
+### 3. NSG Adjustments for ESLZ Compliance
+
+**Current state:** Well-structured, good microsegmentation already in place.
+
+**Changes needed:**
+
+| Issue | Recommendation | Priority |
+|-------|-----------------|----------|
+| No explicit Deny-All rules | Add `Priority 4000: Deny *` to inbound/outbound on all subnets | P1 |
+| Private Endpoints NSG empty | Add: allow HTTPS 443 from VNet, deny-all others | P1 |
+| APIM HTTPS rule too broad | Tighten to PE subnet only (`10.1.6.0/24`) | P2 |
+| AKS missing egress rules | Add explicit outbound to ACR, AAD, Azure Monitor (443) | P2 |
+
+---
+
+### 4. Azure Policy Compliance Risks
+
+| Policy | Impact | Mitigation |
+|--------|--------|------------|
+| **Deny-PublicIP** | Blocks public IPs | ✅ Compatible (Bastion needs exemption or private-only SKU) |
+| **Deny-Subnet-Without-NSG** | All subnets need NSGs | ✅ Compatible (all have NSGs) |
+| **Enforce-NSG-FlowLogs** | NSG flow logs required | ⚠️ Add NSG Flow Log resources to Bicep |
+| **Deploy-DDoS-Standard** | DDoS Plan required | ⚠️ Add or link to hub DDoS plan |
+| **Deny-Inbound-From-Internet** | No internet inbound in NSGs | ⚠️ Bastion NSG allows HTTPS — needs exemption |
+
+**Action:** Run `az deployment group what-if` before Phase 1 deployment to surface policy denials.
+
+---
+
+## Deployment Configuration
+
+### Region & Resource Naming
+
+| Decision | Value | Rationale |
+|----------|-------|-----------|
+| **Region** | `westus2` | All existing ESLZ RGs in region; consistent pattern |
+| **Resource Group** | `rg-afd-apim-private-demo-dev-wus2` | ESLZ naming standard: `rg-{workload}-{env}-{region}` |
+
+---
+
+### Kubernetes Version
+
+**Current param:** `1.29` (❌ no longer available in westus2)  
+**Recommendation:** `1.34` (GA default, good patch coverage)
+
+| Version | Status | Available in westus2 | Recommendation |
+|---------|--------|----------------------|-----------------|
+| 1.29 | Dropped | ❌ | Must update |
+| 1.30 | GA | ✅ | Older, fewer patches |
+| 1.31 | GA | ✅ | Supported |
+| 1.32 | GA | ✅ | Supported |
+| 1.33 | GA | ✅ | Good stability |
+| **1.34** | **GA** | **✅** | **✅ Recommended** |
+| 1.35 | Latest | ✅ | Newer, fewer patches |
+
+**Action:** Update `main.bicepparam` kubernetesVersion from `1.29` to `1.34`.
+
+---
+
+### APIM Configuration
+
+| Decision | Value | Notes |
+|----------|-------|-------|
+| **SKU** | Developer | ~$50/mo; sufficient for demo; clear upgrade path to Premium |
+| **VNet Mode** | Internal (private) | ✅ Supported by Developer SKU with stv2 |
+| **Publisher Email** | **Must change** | Current `admin@contoso.com` is placeholder; will receive service notifications |
+| **Private Endpoint** | Enabled | APIM PE in `snet-private-endpoints`; AFD connects via Private Link |
+| **Private Link Service** | 2-phase deployment | Phase 1: skip (no ILB IP config yet); Phase 2: enable after K8s ILB deployed |
+
+**Action:** John must provide real publisher email (e.g., `john@MngEnvMCAP484724.onmicrosoft.com` or corporate domain).
+
+---
+
+### Tags (ESLZ Requirement)
+
+**Current:** Minimal (`project`, `environment`, `managedBy`)  
+**Recommendation:** Add ESLZ-standard tags
+
+```yaml
+tags:
+  project: 'afd-apim-private'
+  environment: 'dev'
+  managedBy: 'bicep'
+  costCenter: '<John to provide>'
+  owner: '<John's email>'
+  applicationName: 'AFD-APIM-Private-Demo'
+```
+
+**Action:** John must provide `costCenter` and confirm `owner` email.
+
+---
+
+### Diagnostics & Monitoring
+
+| Decision | Value | Notes |
+|----------|-------|-------|
+| **Log Analytics** | Local workspace in subscription | Workload-local logs; sufficient for demo |
+| **ESLZ best practice** | Dual-send (local + hub Management sub) | Not required for demo; defer to production |
+
+---
+
+## Deployment Phasing
+
+**Phase 1: Full infrastructure (45-60 min)**
+- VNet, NSGs, DNS zones, Key Vault, Log Analytics, AKS, APIM, APIM PE, WAF, AFD
+- AFD Private Endpoint will show as "Pending" — requires manual approval on APIM PE
+- AKS LoadBalancer will be external (no Private Link Service yet)
+
+**Phase 2: After Kubernetes services deployed (10-15 min)**
+1. Deploy K8s services with `azure-load-balancer-internal` annotation
+2. Retrieve ILB frontend IP config resource ID
+3. Re-deploy Bicep with `aksLoadBalancerFrontendIpConfigId` to enable Private Link Service
+
+---
+
+## Estimated Monthly Cost (Dev/Demo)
+
+| Resource | Cost |
+|----------|------|
+| AFD Premium | ~$350 |
+| APIM Developer | ~$50 |
+| AKS (2× Standard_DS2_v2) | ~$200 |
+| Log Analytics | ~$12 |
+| Key Vault + Private Endpoints + DNS | ~$25 |
+| **TOTAL** | **~$640/mo** |
+
+---
+
+## John's Action Items (Blocking)
+
+| # | Item | Must Change | Default/Rec. | Status |
+|---|------|-------------|--------------|--------|
+| 1 | Confirm tenant ID (provided vs. discovered) | ⚠️ **CRITICAL** | `4d00acda-...` is correct | Pending |
+| 2 | APIM publisher email | ⚠️ **YES** | Provide real email | Pending |
+| 3 | Kubernetes version | ⚠️ **YES** | Update from `1.29` → `1.34` | Pending |
+| 4 | Cost center tag | ⚠️ **YES** | Provide value | Pending |
+| 5 | Owner email tag | ✅ Confirm | John's email | Pending |
+| 6 | VNet address space | ✅ Confirm or alt | `10.1.0.0/16` rec. | Pending |
+| 7 | Region | ✅ Confirm | `westus2` | Pending |
+| 8 | Subscription | ✅ Confirm | Spaidoso-LZ-Online | Pending |
+| 9 | APIM SKU | ✅ Confirm | Developer | Pending |
+| 10 | Diagnostics | ✅ Confirm | Single workspace | Pending |
+| 11 | DNS zones | ✅ Confirm | Local to spoke | Pending |
+| 12 | Deployment phasing | ✅ Confirm | 2-phase | Pending |
+
+---
+
+## Pre-Deployment Checklist
+
+- [ ] Verify tenant ID (provided vs. actual)
+- [ ] Update `main.bicepparam`: `kubernetesVersion` → `1.34`
+- [ ] Update `main.bicepparam`: `apimPublisherEmail` → real email
+- [ ] Add tags to `main.bicepparam`: `costCenter`, `owner`
+- [ ] Update VNet/subnet prefixes: `10.0.x.x` → `10.1.x.x` in param and `vnet.bicep`
+- [ ] Add missing DNS zones: `privatelink.westus2.azmk8s.io`, `privatelink.azurecr.io`
+- [ ] Add explicit Deny-All NSG rules (P4000)
+- [ ] Tighten APIM HTTPS rule to PE subnet only
+- [ ] Add AKS egress rules for ACR, AAD, Monitor
+- [ ] `az account set --subscription 966a8e3c-bd80-41dd-8910-506aab21e18b`
+- [ ] `az group create -n rg-afd-apim-private-demo-dev-wus2 -l westus2`
+- [ ] **Run `az deployment group what-if`** to check for policy denials
+- [ ] Approve AFD Private Endpoint on APIM (post Phase 1)
+- [ ] Deploy K8s workloads, get ILB IP config ID
+- [ ] Deploy Phase 2 with `aksLoadBalancerFrontendIpConfigId`
+- [ ] Validate: `curl https://<afd-endpoint>.azurefd.net/pet/1`
+
+---
+
+## Related References
+
+- **MacReady decision document:** .squad/decisions/inbox/macready-eslz-deployment-decisions.md (archived)
+- **Childs networking document:** .squad/decisions/inbox/childs-eslz-networking-decisions.md (archived)
+- **ESLZ reference:** [Azure Landing Zones](https://learn.microsoft.com/en-us/azure/cloud-adoption-framework/ready/enterprise-scale/architecture)
