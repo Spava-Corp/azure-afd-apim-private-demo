@@ -49,8 +49,32 @@ resource keyVaultDnsZoneVnetLink 'Microsoft.Network/privateDnsZones/virtualNetwo
   }
 }
 
+// Private DNS zone for AKS private cluster
+resource aksDnsZone 'Microsoft.Network/privateDnsZones@2020-06-01' = {
+  name: 'privatelink.westus2.azmk8s.io'
+  location: 'global'
+  tags: tags
+}
+
+// VNet link for AKS DNS zone
+resource aksDnsZoneVnetLink 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@2020-06-01' = {
+  parent: aksDnsZone
+  name: 'link-aks'
+  location: 'global'
+  tags: tags
+  properties: {
+    virtualNetwork: {
+      id: vnetId
+    }
+    registrationEnabled: false
+  }
+}
+
 @description('Resource ID of the APIM private DNS zone')
 output apimDnsZoneId string = apimDnsZone.id
 
 @description('Resource ID of the Key Vault private DNS zone')
 output keyVaultDnsZoneId string = keyVaultDnsZone.id
+
+@description('Resource ID of the AKS private DNS zone')
+output aksDnsZoneId string = aksDnsZone.id

@@ -25,7 +25,8 @@ param softDeleteRetentionInDays int = 90
 @description('Tags to apply to resources')
 param tags object = {}
 
-var keyVaultName = '${prefix}-kv-${environment}'
+// Key Vault names are globally unique — append a hash of the resource group ID
+var keyVaultName = '${prefix}-kv-${environment}-${substring(uniqueString(resourceGroup().id), 0, 6)}'
 
 resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
   name: keyVaultName

@@ -31,19 +31,19 @@ param tags object = {
 // ─── Networking Parameters ────────────────────────────────────────────────────
 
 @description('VNet address space')
-param vnetAddressPrefix string = '10.0.0.0/16'
+param vnetAddressPrefix string = '10.1.0.0/16'
 
 @description('APIM subnet address prefix')
-param apimSubnetPrefix string = '10.0.1.0/24'
+param apimSubnetPrefix string = '10.1.1.0/24'
 
 @description('AKS subnet address prefix')
-param aksSubnetPrefix string = '10.0.2.0/22'
+param aksSubnetPrefix string = '10.1.4.0/22'
 
 @description('Private Endpoints subnet address prefix')
-param privateEndpointSubnetPrefix string = '10.0.6.0/24'
+param privateEndpointSubnetPrefix string = '10.1.8.0/24'
 
 @description('Bastion subnet address prefix')
-param bastionSubnetPrefix string = '10.0.7.0/26'
+param bastionSubnetPrefix string = '10.1.9.0/26'
 
 // ─── APIM Parameters ──────────────────────────────────────────────────────────
 
@@ -60,7 +60,7 @@ param apimSkuName string = 'Developer'
 // ─── AKS Parameters ──────────────────────────────────────────────────────────
 
 @description('Kubernetes version')
-param kubernetesVersion string = '1.29'
+param kubernetesVersion string = '1.34'
 
 @description('AKS system node pool VM size')
 param aksNodeVmSize string = 'Standard_DS2_v2'
@@ -186,7 +186,6 @@ module apim 'modules/apim/apim.bicep' = {
     publisherEmail: apimPublisherEmail
     publisherName: apimPublisherName
     skuName: apimSkuName
-    apimSubnetId: networking.outputs.apimSubnetId
     workspaceId: logAnalytics.outputs.workspaceId
     tags: tags
   }
@@ -240,8 +239,7 @@ module frontDoor 'modules/front-door/afd.bicep' = {
     prefix: prefix
     environment: environment
     wafPolicyId: wafPolicy.outputs.wafPolicyId
-    apimPrivateEndpointId: apimPrivateEndpoint.outputs.privateEndpointId
-    apimHostname: '${prefix}-apim-${environment}.azure-api.net'
+    apimHostname:'${prefix}-apim-${environment}.azure-api.net'
     apimPrivateLinkServiceId: apim.outputs.apimId
     tags: tags
   }

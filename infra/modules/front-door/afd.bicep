@@ -10,9 +10,6 @@ param environment string
 @description('Resource ID of the WAF policy to associate')
 param wafPolicyId string
 
-@description('Resource ID of the APIM private endpoint')
-param apimPrivateEndpointId string
-
 @description('APIM hostname (e.g., demo-apim-dev.azure-api.net)')
 param apimHostname string
 
@@ -22,8 +19,8 @@ param apimPrivateLinkServiceId string
 @description('Tags to apply to resources')
 param tags object = {}
 
-var afdProfileName = '${prefix}-afd-${environment}'
-var endpointName = '${prefix}-endpoint-${environment}'
+var afdProfileName = '${prefix}-afd-${environment}-${substring(uniqueString(resourceGroup().id), 0, 6)}'
+var endpointName = '${prefix}-endpoint-${environment}-${substring(uniqueString(resourceGroup().id), 0, 6)}'
 
 // AFD Premium Profile
 resource afdProfile 'Microsoft.Cdn/profiles@2023-05-01' = {

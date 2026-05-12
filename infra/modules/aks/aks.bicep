@@ -52,8 +52,8 @@ resource aksCluster 'Microsoft.ContainerService/managedClusters@2024-01-01' = {
     networkProfile: {
       networkPlugin: 'azure'
       networkPolicy: 'calico'
-      serviceCidr: '10.1.0.0/16'
-      dnsServiceIP: '10.1.0.10'
+      serviceCidr: '10.250.0.0/16'
+      dnsServiceIP: '10.250.0.10'
       loadBalancerSku: 'standard'
       outboundType: 'loadBalancer'
     }
