@@ -224,8 +224,42 @@ tags:
 
 ---
 
+## Implementation Summary (2026-05-12)
+
+### Blair (Infra Dev) — VNet Address Space & K8s Version Shift
+**Status:** ✅ Completed
+
+- VNet address space: `10.0.0.0/16` → `10.1.0.0/16`
+- APIM subnet: `10.0.1.0/24` → `10.1.1.0/24`
+- AKS subnet: `10.0.2.0/22` → `10.1.2.0/22`
+- PE subnet: `10.0.6.0/24` → `10.1.6.0/24`
+- Bastion subnet: `10.0.7.0/26` → `10.1.7.0/26`
+- Kubernetes version: `1.29` → `1.34` (v1.29 no longer available in westus2)
+- APIM publisher email: `admin@contoso.com` → `demo-admin@spaidoso.onmicrosoft.com`
+- ARM template rebuilt in `infra/main.json`
+
+**Files touched:** `infra/main.bicepparam`, `infra/main.bicep`, `infra/modules/networking/vnet.bicep`
+
+---
+
+### Childs (Network/Security) — NSG Hardening & Private DNS
+**Status:** ✅ Completed
+
+1. **Deny-All Rules (P4000):** All four NSGs (APIM, AKS, PE, Bastion) now have explicit inbound and outbound deny rules for audit compliance.
+2. **APIM HTTPS Tightening:** Inbound rule source narrowed from `VirtualNetwork` to PE subnet only (`10.1.6.0/24`).
+3. **PE Subnet NSG:** Populated with `Allow-HTTPS-From-VNet` (P100, inbound 443) for private endpoint traffic.
+4. **AKS Outbound Allowlist:**
+   - P110: ACR (container image pulls)
+   - P120: AAD (control plane auth, managed identity tokens)
+   - P130: AzureMonitor (Container Insights, metrics)
+5. **AKS Private DNS Zone:** Added `privatelink.westus2.azmk8s.io` with VNet link and **new output `aksDnsZoneId`**.
+
+**Files touched:** `infra/modules/networking/vnet.bicep` (NSG rules), `infra/modules/networking/private-dns-zones.bicep` (AKS zone + output)
+
+**Cross-team note:** Blair may need to wire `aksDnsZoneId` output into `main.bicep` if AKS module consumes it.
+
+---
+
 ## Related References
 
-- **MacReady decision document:** .squad/decisions/inbox/macready-eslz-deployment-decisions.md (archived)
-- **Childs networking document:** .squad/decisions/inbox/childs-eslz-networking-decisions.md (archived)
 - **ESLZ reference:** [Azure Landing Zones](https://learn.microsoft.com/en-us/azure/cloud-adoption-framework/ready/enterprise-scale/architecture)
