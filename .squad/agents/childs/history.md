@@ -27,3 +27,13 @@
 - **No address space changes:** Parameter defaults already updated by Blair to 10.1.x.x. NSG rules use new PE subnet prefix `10.1.6.0/24` directly.
 - **Decision document:** Written to `.squad/decisions/inbox/childs-nsg-hardening.md`.
 - **2026-05-12 (Blair cross-team):** Blair completed VNet address space readdressing (10.0→10.1) and K8s version update (1.29→1.34). ARM template rebuilt. All NSG rules now use correct 10.1.x.x CIDR blocks.
+
+### 2026-05-13 — Least-Privilege RBAC Remediation for GitHub Actions OIDC
+- **Root cause:** Three SPs had Contributor at subscription scope (SC-OnlineLZ-00). Only one SP (`github-actions-afd-apim-private-demo`, objectId `b6098f74-6873-4bb9-a02c-42a22e88225c`) is in use.
+- **Unused SPs cleaned:** Removed all role assignments from `afd-apim-private-demo-gha` (objectId `66a37932-304d-4ed7-b15f-10b5cfea04ea`) and `github-afd-apim-private-demo-deploy` (objectId `425d3196-e468-4880-82ea-c012949d5bd5`).
+- **Least-privilege model applied:** Replaced subscription-scope Contributor with two scoped roles:
+  1. **Custom role "Resource Group Contributor - GHA"** (ID: `e22d8292-69a5-4844-b2bc-6016cf675120`) at subscription scope — only allows `Microsoft.Resources/subscriptions/resourceGroups/{read,write,delete}`. Needed for `az group create` in the CI/CD workflow.
+  2. **Contributor** at resource group scope (`rg-afd-apim-private-demo-dev-wus2`) — allows full deployment of all resource types (VNet, NSGs, DNS zones, Key Vault, AKS, APIM, Private Endpoints, AFD, WAF) within the RG only.
+- **Rationale for Contributor at RG scope:** The Bicep template deploys 8+ distinct resource providers (Network, ContainerService, ApiManagement, Cdn, KeyVault, OperationalInsights, etc.). Enumerating per-provider roles would be brittle and hard to maintain for a demo. Contributor at RG scope is the standard least-privilege boundary for ARM deployments.
+- **Key file paths:** `.github/workflows/deploy-infra.yml` (CI/CD), `infra/main.bicep` (orchestrator), `infra/main.bicepparam` (parameters).
+- **Decision document:** Written to `.squad/decisions/inbox/childs-least-privilege-rbac.md`.
