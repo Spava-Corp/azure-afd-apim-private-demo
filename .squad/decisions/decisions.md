@@ -260,6 +260,41 @@ tags:
 
 ---
 
+---
+
+## 2026-05-13: Least-Privilege RBAC for GitHub Actions OIDC (Childs)
+
+**Date:** 2026-05-13  
+**Author:** Childs (Network/Security)  
+**Status:** Implemented  
+**Scope:** SC-OnlineLZ-00 subscription (`6a170127-f4d5-4706-af95-e957af9cbcff`)
+
+### Problem
+Three service principals had **Contributor at subscription scope** on SC-OnlineLZ-00. This was an emergency fix to unblock CI/CD after discovering zero RBAC assignments on the OIDC-configured SPs. Subscription-scope Contributor violates least-privilege.
+
+### Decision
+Replace subscription-scope Contributor with two scoped roles on the single active SP.
+
+**Active SP:** `github-actions-afd-apim-private-demo`  
+- **App ID:** `ac563e84-f1dd-4582-bc7b-ce2b79089cb4`  
+- **Object ID:** `b6098f74-6873-4bb9-a02c-42a22e88225c`
+
+**Role Assignments (AFTER):**
+| Role | Scope | Purpose |
+|------|-------|---------|
+| `Resource Group Contributor - GHA` (custom) | Subscription `6a170127-...` | `az group create` in workflow — RG read/write/delete only |
+| `Contributor` (built-in) | RG `rg-afd-apim-private-demo-dev-wus2` | ARM deployments — all resource types within this RG |
+
+**Unused SPs Cleaned (ZERO role assignments):**
+- `afd-apim-private-demo-gha` (Contributor removed)
+- `github-afd-apim-private-demo-deploy` (Contributor removed)
+
+**Rationale:** 8+ resource providers in Bicep; fine-grained roles per provider would be fragile. Custom role limits subscription-level blast radius to RG management only. `az group create` requires subscription-level action.
+
+**Future:** Delete unused app registrations if confirmed unnecessary. Add PR-scoped federated credential for what-if previews.
+
+---
+
 ## Related References
 
 - **ESLZ reference:** [Azure Landing Zones](https://learn.microsoft.com/en-us/azure/cloud-adoption-framework/ready/enterprise-scale/architecture)
