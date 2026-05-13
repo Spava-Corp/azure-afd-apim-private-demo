@@ -37,3 +37,12 @@
 - **Rationale for Contributor at RG scope:** The Bicep template deploys 8+ distinct resource providers (Network, ContainerService, ApiManagement, Cdn, KeyVault, OperationalInsights, etc.). Enumerating per-provider roles would be brittle and hard to maintain for a demo. Contributor at RG scope is the standard least-privilege boundary for ARM deployments.
 - **Key file paths:** `.github/workflows/deploy-infra.yml` (CI/CD), `infra/main.bicep` (orchestrator), `infra/main.bicepparam` (parameters).
 - **Decision document:** Written to `.squad/decisions/inbox/childs-least-privilege-rbac.md`.
+
+### 2026-05-13 — Production Environment Federated Credential
+- **Root cause:** Deploy Infrastructure workflow failed with `AADSTS700213` because the `deploy` job uses `environment: production`, which sends OIDC subject `repo:x3nc0n/azure-afd-apim-private-demo:environment:production`. No matching federated credential existed on the SP.
+- **Existing credentials:** Two branch-based credentials existed (`ref:refs/heads/main` and `ref:refs/heads/feat/eslz-deployment-ready`) but environment-based claims are distinct from branch-based claims — both are needed.
+- **Fix applied:** Added federated credential `github-actions-production-env` to app registration `github-actions-afd-apim-private-demo` (appId: `ac563e84-f1dd-4582-bc7b-ce2b79089cb4`) with subject `repo:x3nc0n/azure-afd-apim-private-demo:environment:production`.
+- **GitHub environment:** Confirmed `production` environment already exists in the repo (created 2026-05-13T17:12:55Z).
+- **No existing credentials modified.** No RBAC changes made.
+- **Decision document:** Written to `.squad/decisions/decisions.md` — merged from inbox 2026-05-13T17:22Z.
+- **Scribe processed:** Merged decision into decisions.md, deleted inbox file, wrote orchestration and session logs.

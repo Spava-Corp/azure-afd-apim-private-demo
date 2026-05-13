@@ -295,6 +295,56 @@ Replace subscription-scope Contributor with two scoped roles on the single activ
 
 ---
 
+---
+
+## 2026-05-13: Production Environment Federated Credential (Childs)
+
+**Date:** 2026-05-13  
+**Author:** Childs (Network/Security)  
+**Status:** Implemented  
+**Requested by:** John
+
+### Problem
+
+The Deploy Infrastructure workflow (`deploy-infra.yml`) failed with error `AADSTS700213` when running on `main`. The deploy job specifies `environment: production`, causing GitHub Actions OIDC to send the subject claim `repo:x3nc0n/azure-afd-apim-private-demo:environment:production`. No matching federated identity credential existed on the service principal.
+
+### Context
+
+The app registration `github-actions-afd-apim-private-demo` (appId: `ac563e84-f1dd-4582-bc7b-ce2b79089cb4`) had two existing federated credentials:
+
+| Name | Subject |
+|------|---------|
+| `github-actions-main-branch` | `repo:x3nc0n/azure-afd-apim-private-demo:ref:refs/heads/main` |
+| `github-actions-feat-branch` | `repo:x3nc0n/azure-afd-apim-private-demo:ref:refs/heads/feat/eslz-deployment-ready` |
+
+These are **branch-based** credentials. When a workflow job uses `environment: production`, GitHub Actions sends an **environment-based** subject claim instead of a branch-based one. Both credential types are needed — the branch credential for jobs without an environment, and the environment credential for deployment jobs.
+
+### Decision
+
+Added a third federated credential:
+
+| Name | Subject |
+|------|---------|
+| `github-actions-production-env` | `repo:x3nc0n/azure-afd-apim-private-demo:environment:production` |
+
+Configuration:
+- **Issuer:** `https://token.actions.githubusercontent.com`
+- **Audience:** `api://AzureADTokenExchange`
+- **Credential ID:** `8ab4f736-57cf-4928-9799-0fb482b5a756`
+
+### Verification
+
+- All three federated credentials confirmed present on the app registration.
+- The `production` environment already exists in the GitHub repo (created 2026-05-13T17:12:55Z).
+- No existing credentials were modified.
+- No RBAC role assignments were changed.
+
+### Risk
+
+Low. This is standard OIDC federation configuration. The credential is scoped to only the `production` environment in this specific repository — it cannot be used by other repos or environments.
+
+---
+
 ## Related References
 
 - **ESLZ reference:** [Azure Landing Zones](https://learn.microsoft.com/en-us/azure/cloud-adoption-framework/ready/enterprise-scale/architecture)
