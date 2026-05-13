@@ -2,7 +2,7 @@ using './main.bicep'
 
 // ─── ESLZ Online Landing Zone — Dev Environment Defaults ──────────────────────
 // AFD Premium → APIM (Developer, Internal) → AKS (Private Link) Architecture
-// Subscription: Spaidoso-LZ-Online | Region: West US 2
+// Subscription: <YOUR_SUBSCRIPTION> | Region: West US 2
 // VNet: 10.1.0.0/16 (shifted to avoid ESLZ hub 10.0.0.0/16 collision)
 
 // Global
@@ -18,7 +18,7 @@ param privateEndpointSubnetPrefix = '10.1.8.0/24'
 param bastionSubnetPrefix = '10.1.9.0/26'
 
 // APIM
-param apimPublisherEmail = 'demo-admin@spaidoso.onmicrosoft.com'
+param apimPublisherEmail = 'admin@example.com'
 param apimPublisherName = 'SecOps Demo'
 param apimSkuName = 'Developer'
 
