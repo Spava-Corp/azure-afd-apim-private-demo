@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.42.1.51946",
-      "templateHash": "14655156195896613760"
+      "templateHash": "7554802434397953879"
     }
   },
   "parameters": {
@@ -157,6 +157,13 @@
       "defaultValue": "",
       "metadata": {
         "description": "Resource ID of the AKS internal load balancer frontend IP config. Set after deploying K8s services with internal LB annotation. Leave empty for initial deployment."
+      }
+    },
+    "aksInternalLbIp": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Internal IP address of the AKS internal load balancer that fronts Petstore and Podinfo. Set after deploying K8s services."
       }
     }
   },
@@ -2627,7 +2634,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.42.1.51946",
-              "templateHash": "10135780126497507993"
+              "templateHash": "11336874101679972200"
             }
           },
           "parameters": {
@@ -2645,7 +2652,7 @@
             }
           },
           "variables": {
-            "policyXml": "[replace('<policies>\n  <inbound>\n    <check-header name=\"X-Azure-FDID\" failed-check-httpcode=\"403\" failed-check-error-message=\"Access denied - request must arrive through Azure Front Door.\" ignore-case=\"true\">\n      <value>__FDID__</value>\n    </check-header>\n  </inbound>\n  <backend />\n  <outbound />\n  <on-error />\n</policies>', '__FDID__', parameters('frontDoorId'))]"
+            "policyXml": "[replace('<policies>\r\n  <inbound>\r\n    <check-header name=\"X-Azure-FDID\" failed-check-httpcode=\"403\" failed-check-error-message=\"Access denied - request must arrive through Azure Front Door.\" ignore-case=\"true\">\r\n      <value>__FDID__</value>\r\n    </check-header>\r\n  </inbound>\r\n  <backend />\r\n  <outbound />\r\n  <on-error />\r\n</policies>', '__FDID__', parameters('frontDoorId'))]"
           },
           "resources": [
             {
@@ -2663,6 +2670,158 @@
       "dependsOn": [
         "[resourceId('Microsoft.Resources/deployments', 'deploy-apim')]",
         "[resourceId('Microsoft.Resources/deployments', 'deploy-front-door')]"
+      ]
+    },
+    {
+      "condition": "[and(not(empty(parameters('aksLoadBalancerFrontendIpConfigId'))), not(empty(parameters('aksInternalLbIp'))))]",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "deploy-apim-apis",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "apimName": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-apim'), '2025-04-01').outputs.apimName.value]"
+          },
+          "backendUrl": {
+            "value": "[format('http://{0}', parameters('aksInternalLbIp'))]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.42.1.51946",
+              "templateHash": "16268266661241783249"
+            }
+          },
+          "parameters": {
+            "apimName": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the existing APIM service"
+              }
+            },
+            "backendUrl": {
+              "type": "string",
+              "metadata": {
+                "description": "Base backend URL reachable from APIM, without the port (for example http://10.1.4.10)"
+              }
+            }
+          },
+          "variables": {
+            "petstoreApiName": "petstore",
+            "podinfoApiName": "podinfo",
+            "wildcardMethods": [
+              "GET",
+              "POST",
+              "PUT",
+              "DELETE"
+            ]
+          },
+          "resources": [
+            {
+              "type": "Microsoft.ApiManagement/service/apis",
+              "apiVersion": "2023-05-01-preview",
+              "name": "[format('{0}/{1}', parameters('apimName'), variables('petstoreApiName'))]",
+              "properties": {
+                "displayName": "Petstore",
+                "path": "petstore",
+                "protocols": [
+                  "https"
+                ],
+                "serviceUrl": "[format('{0}:8080', parameters('backendUrl'))]"
+              }
+            },
+            {
+              "type": "Microsoft.ApiManagement/service/apis",
+              "apiVersion": "2023-05-01-preview",
+              "name": "[format('{0}/{1}', parameters('apimName'), variables('podinfoApiName'))]",
+              "properties": {
+                "displayName": "Podinfo",
+                "path": "podinfo",
+                "protocols": [
+                  "https"
+                ],
+                "serviceUrl": "[format('{0}:9898', parameters('backendUrl'))]"
+              }
+            },
+            {
+              "copy": {
+                "name": "petstoreOperations",
+                "count": "[length(variables('wildcardMethods'))]"
+              },
+              "type": "Microsoft.ApiManagement/service/apis/operations",
+              "apiVersion": "2023-05-01-preview",
+              "name": "[format('{0}/{1}/{2}', parameters('apimName'), variables('petstoreApiName'), toLower(variables('wildcardMethods')[copyIndex()]))]",
+              "properties": {
+                "displayName": "[format('Forward {0} requests', variables('wildcardMethods')[copyIndex()])]",
+                "method": "[variables('wildcardMethods')[copyIndex()]]",
+                "urlTemplate": "/{*path}",
+                "templateParameters": [
+                  {
+                    "name": "path",
+                    "required": false,
+                    "type": "string"
+                  }
+                ],
+                "responses": []
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ApiManagement/service/apis', parameters('apimName'), variables('petstoreApiName'))]"
+              ]
+            },
+            {
+              "copy": {
+                "name": "podinfoOperations",
+                "count": "[length(variables('wildcardMethods'))]"
+              },
+              "type": "Microsoft.ApiManagement/service/apis/operations",
+              "apiVersion": "2023-05-01-preview",
+              "name": "[format('{0}/{1}/{2}', parameters('apimName'), variables('podinfoApiName'), toLower(variables('wildcardMethods')[copyIndex()]))]",
+              "properties": {
+                "displayName": "[format('Forward {0} requests', variables('wildcardMethods')[copyIndex()])]",
+                "method": "[variables('wildcardMethods')[copyIndex()]]",
+                "urlTemplate": "/{*path}",
+                "templateParameters": [
+                  {
+                    "name": "path",
+                    "required": false,
+                    "type": "string"
+                  }
+                ],
+                "responses": []
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ApiManagement/service/apis', parameters('apimName'), variables('podinfoApiName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.ApiManagement/service/products/apis",
+              "apiVersion": "2023-05-01-preview",
+              "name": "[format('{0}/{1}/{2}', parameters('apimName'), 'unlimited', variables('petstoreApiName'))]",
+              "dependsOn": [
+                "[resourceId('Microsoft.ApiManagement/service/apis', parameters('apimName'), variables('petstoreApiName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.ApiManagement/service/products/apis",
+              "apiVersion": "2023-05-01-preview",
+              "name": "[format('{0}/{1}/{2}', parameters('apimName'), 'unlimited', variables('podinfoApiName'))]",
+              "dependsOn": [
+                "[resourceId('Microsoft.ApiManagement/service/apis', parameters('apimName'), variables('podinfoApiName'))]"
+              ]
+            }
+          ]
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Resources/deployments', 'deploy-apim')]"
       ]
     }
   ],

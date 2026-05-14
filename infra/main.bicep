@@ -89,6 +89,9 @@ param rateLimitThreshold int = 1000
 @description('Resource ID of the AKS internal load balancer frontend IP config. Set after deploying K8s services with internal LB annotation. Leave empty for initial deployment.')
 param aksLoadBalancerFrontendIpConfigId string = ''
 
+@description('Internal IP address of the AKS internal load balancer that fronts Petstore and Podinfo. Set after deploying K8s services.')
+param aksInternalLbIp string = ''
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // MODULE DEPLOYMENTS
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -257,6 +260,15 @@ module apimFdidPolicy 'modules/apim/apim-fdid-policy.bicep' = {
   params: {
     apimName: apim.outputs.apimName
     frontDoorId: frontDoor.outputs.afdFrontDoorId
+  }
+}
+
+// 5.2 APIM backend APIs for AKS services (deployed in the same second phase as the PLS)
+module apimApis 'modules/apim/apim-apis.bicep' = if (!empty(aksLoadBalancerFrontendIpConfigId) && !empty(aksInternalLbIp)) {
+  name: 'deploy-apim-apis'
+  params: {
+    apimName: apim.outputs.apimName
+    backendUrl: 'http://${aksInternalLbIp}'
   }
 }
 
