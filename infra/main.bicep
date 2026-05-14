@@ -239,7 +239,7 @@ module frontDoor 'modules/front-door/afd.bicep' = {
     prefix: prefix
     environment: environment
     wafPolicyId: wafPolicy.outputs.wafPolicyId
-    apimHostname:'${prefix}-apim-${environment}.azure-api.net'
+    apimHostname: '${apim.outputs.apimName}.azure-api.net'
     apimPrivateLinkServiceId: apim.outputs.apimId
     tags: tags
   }
