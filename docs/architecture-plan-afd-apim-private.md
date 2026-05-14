@@ -28,8 +28,8 @@ Internet Client
               │
               ▼
 ┌─────────────────────────────┐
-│  Azure API Management        │  ← Internal mode (stv2 platform)
-│  (Premium SKU, internal)     │  ← Policy enforcement, throttling, auth
+│  Azure API Management        │  ← stv2 gateway behind Private Endpoint
+│  (PE-only, public disabled)  │  ← Policy enforcement, throttling, auth
 └─────────────┬───────────────┘
               │ Private Endpoint
               ▼
@@ -44,7 +44,8 @@ Internet Client
 | Property | Value |
 |----------|-------|
 | Public internet exposure | AFD only (Microsoft PoPs) |
-| APIM public IP | None (internal mode) |
+| APIM public network access | Disabled |
+| APIM public IP | None |
 | Backend public IP | None |
 | Inter-service traversal | Azure backbone only |
 | WAF enforcement point | AFD edge |
@@ -80,7 +81,7 @@ Internet Client
 | Bot manager | Microsoft Bot Manager | ✅ Enable — blocks scrapers, credential stuffers |
 | Rate limiting | Custom rules | ✅ Add per-IP rate limit (e.g., 1000 req/min) |
 | Geo-filtering | Custom rules | Depends on audience — lock to expected countries |
-| Custom rules | IP allowlist, header validation | Add `X-Azure-FDID` header validation at APIM to prevent bypass |
+| Custom rules | IP allowlist, header validation | Prefer PE-only APIM with `publicNetworkAccess: 'Disabled'`; keep `X-Azure-FDID` validation as the fallback |
 
 **Decision required:**
 1. Start in Detection or Prevention mode?
@@ -115,23 +116,25 @@ Internet Client
 | Premium | ✅ External/Internal | ✅ (stv2) | ✅ | ~$2,800/mo |
 
 **Decision required:**
-- For **demo/dev**: Developer SKU (supports internal VNet mode, cheap)
-- For **production**: Premium SKU (multi-region, 99.99% SLA, full VNet injection)
+- For **demo/dev**: Developer SKU (stv2 + inbound Private Endpoint support, cheap)
+- For **production**: Premium SKU (multi-region, 99.99% SLA, more scale and resiliency)
 - Must be on **stv2 compute platform** for private endpoint support
 
 **Recommendation:** Developer for POC, Premium for prod.
 
 ---
 
-### 2.5 APIM Deployment Mode
+### 2.5 APIM Network Access Decision
 
-| Mode | Behavior | Use case |
-|------|----------|----------|
-| External | APIM gateway has public IP + VNet connectivity | Public API with VNet backend access |
-| Internal | APIM gateway has private IP only, no public endpoint | ✅ Our architecture — all traffic via AFD Private Link |
-| None (no VNet) | Standard PaaS, no VNet injection | Not suitable here |
+| Option | Behavior | Decision |
+|--------|----------|----------|
+| `virtualNetworkType: 'None'` + `publicNetworkAccess: 'Disabled'` | stv2 APIM stays off public ingress and is reachable only through the approved Private Endpoint path from AFD | ✅ Preferred |
+| `virtualNetworkType: 'None'` + APIM inbound `X-Azure-FDID` validation | Retains a public listener, but compensates with header validation if Azure shared Private Link provisioning requires it | Fallback only |
+| Internal VNet mode | Private IP via VNet injection, but more operationally complex than the PE-only stv2 pattern used here | Not selected |
 
-**Decision required:** **Internal mode** is correct for this architecture. APIM is only reachable via Private Endpoint from AFD.
+**Why we chose `publicNetworkAccess: 'Disabled'`:** it removes the APIM public attack surface entirely and gives stronger defense-in-depth than relying on a header that becomes irrelevant only when AFD is configured correctly.
+
+**When to fall back:** if Azure Front Door shared Private Link provisioning fails, private endpoint approval/data-plane handshakes require public reachability in a given region or SKU, or AFD health probes fail after disabling public access, temporarily use `virtualNetworkType: 'None'` with APIM inbound `X-Azure-FDID` validation.
 
 ---
 
@@ -227,14 +230,14 @@ Internet Client
 
 ### Specific controls:
 
-1. **No public IP on APIM** — Internal mode, only Private Endpoint inbound
+1. **APIM public network access disabled** — `virtualNetworkType: 'None'` with `publicNetworkAccess: 'Disabled'`; only the approved Private Endpoint path remains
 2. **No public IP on backend** — VM/AKS has no public IP; only reachable via Private Link Service
 3. **WAF at the edge** — DRS 2.1 + bot manager + rate limiting before traffic hits your infra
 4. **Private endpoints eliminate public internet traversal** — All inter-service traffic on Azure backbone
 5. **NSG rules** — Explicit allow-list; deny all by default
 6. **Managed Identity** — APIM authenticates to backend via system-assigned MI; no secrets in config
 7. **DDoS Protection** — AFD provides built-in L3/L4 DDoS; optionally add Azure DDoS Protection Plan for VNet resources
-8. **AFD ID validation** — APIM policy checks `X-Azure-FDID` header to prevent origin bypass
+8. **AFD ID validation (fallback only)** — APIM policy checks `X-Azure-FDID` only if shared Private Link compatibility forces public access to remain enabled
 9. **Key Vault for secrets** — Certificates, named values stored in Key Vault with RBAC access
 
 ---
@@ -301,7 +304,7 @@ infra/
 │   │   ├── waf-policy.bicep      # WAF policy (rules, custom rules)
 │   │   └── origin-group.bicep    # Origin group + Private Link origin
 │   ├── apim/
-│   │   ├── apim.bicep            # APIM instance (internal mode)
+│   │   ├── apim.bicep            # APIM instance (PE-only, public access disabled)
 │   │   ├── apim-private-endpoint.bicep  # PE for AFD connectivity
 │   │   └── apim-apis.bicep       # API definitions (post-deploy)
 │   ├── backend/
@@ -376,7 +379,7 @@ monitoring/log-analytics ──→ monitoring/diagnostic-settings (all resources
 
 | Step | Resource | Why this order |
 |------|----------|---------------|
-| 3.1 | APIM (internal mode, stv2) | ⚠️ Takes 30-45 minutes to deploy |
+| 3.1 | APIM (stv2, public access disabled) | ⚠️ Takes 30-45 minutes to deploy |
 | 3.2 | APIM Private Endpoint | Creates the PE that AFD will target |
 | 3.3 | DNS A record in private zone | So AFD can resolve APIM's private IP |
 | 3.4 | Import Petstore OpenAPI into APIM | Configure APIs, policies |
@@ -387,7 +390,7 @@ monitoring/log-analytics ──→ monitoring/diagnostic-settings (all resources
 |------|----------|---------------|
 | 4.1 | WAF Policy | Must exist before AFD references it |
 | 4.2 | AFD Profile (Premium) | Creates the global endpoint |
-| 4.3 | AFD Origin Group + Private Link Origin | Points to APIM private endpoint — **requires approval** |
+| 4.3 | AFD Origin Group + Private Link Origin | Points to APIM private endpoint — **CD pipeline auto-approves in the standard path** |
 | 4.4 | AFD Route | Maps paths to origin group |
 | 4.5 | Custom domain + cert (optional) | Final DNS cutover |
 
@@ -395,7 +398,7 @@ monitoring/log-analytics ──→ monitoring/diagnostic-settings (all resources
 
 | Step | Action |
 |------|--------|
-| 5.1 | Approve Private Endpoint connection on APIM (AFD PE connection shows "Pending") |
+| 5.1 | Confirm the CD pipeline auto-approved the APIM Private Endpoint connection; manually approve only for out-of-band deployments |
 | 5.2 | Test end-to-end: `curl https://<afd-endpoint>.azurefd.net/pet/1` |
 | 5.3 | Verify WAF blocks — send malicious payload, confirm 403 |
 | 5.4 | Enable diagnostic settings on all resources |

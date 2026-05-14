@@ -46,13 +46,9 @@ resource apimService 'Microsoft.ApiManagement/service@2023-05-01-preview' = {
     publisherEmail: publisherEmail
     publisherName: publisherName
     virtualNetworkType: 'None'
-    // Private connectivity is handled via Private Endpoint (apim-private-endpoint module)
-    // AFD connects via shared Private Link origin
-    // NOTE: X-Azure-FDID header validation should be enforced via APIM policy
-    // Kima will add the inbound policy to validate the AFD instance ID
-    // Policy should check: <check-header name="X-Azure-FDID" failed-check-httpcode="403">
-    //   <value>{afd-profile-id}</value>
-    // </check-header>
+    publicNetworkAccess: 'Disabled'
+    // Preferred zero-trust posture: APIM is reachable only through the approved Private Endpoint path from AFD.
+    // If Azure shared Private Link provisioning fails in a given region or SKU, fall back to X-Azure-FDID validation.
   }
 }
 

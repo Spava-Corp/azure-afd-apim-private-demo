@@ -2,7 +2,7 @@
 
 > **Author:** Kima (SecOps Engineer)  
 > **Date:** 2026-05-07  
-> **Architecture:** Azure Front Door Premium → APIM (Internal) → AKS (Private)  
+> **Architecture:** Azure Front Door Premium → APIM (PE-only, public disabled) → AKS (Private)  
 > **Region:** West US 2
 
 ---
@@ -14,8 +14,8 @@
 | 1 | [WAF Prevention Mode](#1-waf-prevention-mode) | OWASP Top 10 attacks | AFD Edge (Global PoPs) | T1190 |
 | 2 | [Bot Manager](#2-bot-manager) | Credential stuffing, scraping | AFD Edge | T1110, T1589 |
 | 3 | [Rate Limiting](#3-rate-limiting) | DDoS, brute force, API abuse | AFD Edge + APIM | T1498, T1110 |
-| 4 | [AFD ID Header Validation](#4-afd-id-header-validation) | Origin bypass attacks | WAF + APIM Policy | T1190, T1090 |
-| 5 | [No Public IP on APIM](#5-no-public-ip-on-apim) | Direct access, reconnaissance | Network architecture | T1595, T1190 |
+| 4 | [APIM Header Validation (Fallback)](#4-apim-header-validation-fallback) | Origin bypass when public access must stay enabled | WAF + APIM Policy | T1190, T1090 |
+| 5 | [APIM Public Network Access Disabled](#5-apim-public-network-access-disabled) | Direct access, reconnaissance | APIM service + network architecture | T1595, T1190 |
 | 6 | [No Public IP on AKS](#6-no-public-ip-on-aks) | Lateral movement, direct exploit | Network architecture | T1210, T1595 |
 | 7 | [NSG Deny-All Default](#7-nsg-deny-all-default) | Lateral movement, port scanning | Subnet boundaries | T1046, T1021 |
 | 8 | [Private Endpoints](#8-private-endpoints) | Data exfil via public internet | Azure backbone | T1048, T1071 |
@@ -116,13 +116,15 @@ AzureDiagnostics
 
 ---
 
-### 4. AFD ID Header Validation
+### 4. APIM Header Validation (Fallback Control)
 
-**What it protects against:** Origin bypass — attackers discovering and directly hitting the APIM endpoint, circumventing WAF protections.
+**What it protects against:** Origin bypass when Azure limitations force APIM public access to remain enabled for Azure Front Door shared Private Link connectivity.
+
+**When used:** Only if `publicNetworkAccess: 'Disabled'` breaks AFD private link provisioning, private endpoint approval/data-plane handshake, or AFD health probes in a specific region or SKU.
 
 **Where enforced:**
-- **Layer 1 (WAF):** Custom rule blocks requests without valid `X-Azure-FDID`
-- **Layer 2 (APIM):** `check-header` policy validates exact AFD profile ID match
+- **Layer 1 (Optional WAF):** Custom rule blocks requests without valid `X-Azure-FDID`
+- **Layer 2 (APIM fallback):** `check-header` policy validates exact AFD profile ID match
 
 **MITRE ATT&CK:**
 - **T1190** (Exploit Public-Facing Application) — Prevents bypass of edge security
@@ -130,42 +132,40 @@ AzureDiagnostics
 
 **How to verify:**
 ```bash
-# Direct request without AFD header — should get 403
-curl -v "https://<apim-internal-ip>/api/pets/1"
-
-# Request with wrong AFD ID — should get 403
+# Fallback mode only: request with wrong AFD ID — should get 403
 curl -v "https://<afd-endpoint>.azurefd.net/api/pets/1" \
   -H "X-Azure-FDID: fake-id-12345"
 
-# Legitimate request through AFD — should get 200
+# Fallback mode only: legitimate request through AFD — should get 200
 curl -v "https://<afd-endpoint>.azurefd.net/api/pets/1"
 ```
 
 ---
 
-### 5. No Public IP on APIM
+### 5. APIM Public Network Access Disabled
 
 **What it protects against:** Direct internet access to the API management layer, reconnaissance scanning, exploit delivery.
 
-**Where enforced:** APIM deployed in Internal VNet mode (no public endpoint). Only reachable via Private Endpoint from AFD's managed VNet.
+**Where enforced:** APIM is deployed with `virtualNetworkType: 'None'` and `publicNetworkAccess: 'Disabled'`. Azure Front Door reaches the gateway only through the approved Private Endpoint path.
 
 **MITRE ATT&CK:**
-- **T1595** (Active Scanning) — No public IP means nothing to scan
+- **T1595** (Active Scanning) — No public listener means nothing to scan
 - **T1190** (Exploit Public-Facing Application) — Can't exploit what you can't reach
 
 **How to verify:**
 ```bash
-# From internet — should timeout (no route to host)
-nmap -Pn -p 443 <apim-private-ip>  # Unreachable from internet
-
-# Verify in Azure — no public IP assigned
+# Verify Azure configuration
 az apim show --name <apim-name> -g <rg> \
-  --query "publicIpAddresses"
-# Should return null/empty
+  --query "{publicNetworkAccess:publicNetworkAccess, publicIpAddresses:publicIpAddresses}"
+# Should show publicNetworkAccess=Disabled and no public IPs
 
 # Verify Private Endpoint exists
 az network private-endpoint list -g <rg> \
   --query "[?contains(name,'apim')].{name:name, subnet:subnet.id}"
+
+# Validate internet clients cannot reach APIM directly
+curl -vk "https://<apim-name>.azure-api.net/api/pets/1"
+# Should fail, timeout, or otherwise be inaccessible from the internet
 ```
 
 ---
@@ -350,7 +350,7 @@ AzureDiagnostics
                       │
               ┌───────▼────────┐
               │ Azure Front Door│  ← Controls: WAF, Bot Mgr, Rate Limit,
-              │    (Premium)    │    DDoS, TLS termination, AFD ID injection
+              │    (Premium)    │    DDoS, TLS termination, fallback AFD ID injection
               └───────┬────────┘
                       │ Private Link (Azure backbone only)
               ┌───────▼────────┐
@@ -359,9 +359,9 @@ AzureDiagnostics
               └───────┬────────┘
                       │
               ┌───────▼────────┐
-              │      APIM       │  ← Controls: AFD ID validation, rate limit,
-              │  (Internal Mode)│    managed identity, header sanitization,
-              │                 │    no public IP
+              │      APIM       │  ← Controls: publicNetworkAccess disabled,
+              │   (PE-only)     │    rate limit, managed identity,
+              │                 │    header sanitization, no public ingress
               └───────┬────────┘
                       │ NSG-restricted (only ports 443/8080 to AKS subnet)
               ┌───────▼────────┐
@@ -380,7 +380,8 @@ AzureDiagnostics
 | SQLi payload via AFD | 403 Blocked | WAF DRS 2.1 |
 | Known bad bot UA | 403 Blocked | Bot Manager |
 | 1100 requests in 60s | 403 after ~1000 | Rate limiting |
-| Direct APIM access (no AFD header) | 403 / Timeout | AFD ID + NSG |
+| Direct APIM access from internet | Timeout / inaccessible | APIM public network access disabled |
+| Fallback mode wrong `X-Azure-FDID` | 403 | APIM header validation fallback |
 | Nmap APIM private IP from internet | No response | No public IP |
 | curl AKS from non-APIM subnet | Timeout | NSG deny-all |
 | DNS resolve APIM name | Private IP (10.x.x.x) | Private Endpoint |

@@ -1,11 +1,11 @@
 // Main Bicep Orchestrator — AFD → APIM → AKS (Private Link) Architecture
 // Deploys all modules in correct dependency order
 //
-// Architecture: Internet → AFD (Premium + WAF) → Private Link → APIM (Internal) → Private Link Service → AKS (Internal LB)
-// All inter-service traffic stays on Azure backbone. No public IPs on APIM or backend.
+// Architecture: Internet → AFD (Premium + WAF) → Private Link → APIM (PE-only, public access disabled) → Private Link Service → AKS (Internal LB)
+// All inter-service traffic stays on Azure backbone. APIM public network access is disabled and the backend has no public IP.
 //
-// Deployment note: APIM in internal mode takes 30-45 minutes to deploy.
-// After deployment, approve the AFD Private Endpoint connection on APIM manually or via script.
+// Deployment note: APIM still takes 30-45 minutes to deploy.
+// The CD pipeline auto-approves the AFD Private Endpoint connection; manual approval is for out-of-band deploys.
 
 targetScope = 'resourceGroup'
 
@@ -176,7 +176,7 @@ module aksPrivateLinkService 'modules/aks/private-link-service.bicep' = if (!emp
 
 // ─── Phase 3: API Management ─────────────────────────────────────────────────
 
-// 3.1 APIM Instance (Internal mode, stv2)
+// 3.1 APIM Instance (PE-only, public access disabled)
 module apim 'modules/apim/apim.bicep' = {
   name: 'deploy-apim'
   params: {
@@ -219,7 +219,7 @@ module keyVaultWithApimAccess 'modules/security/key-vault.bicep' = {
 
 // ─── Phase 4: Edge (Azure Front Door) ────────────────────────────────────────
 
-// 4.1 WAF Policy (afdProfileId is set after AFD deploys; header validation uses output)
+// 4.1 WAF Policy (afdProfileId output is available if fallback header validation is ever needed)
 module wafPolicy 'modules/front-door/waf-policy.bicep' = {
   name: 'deploy-waf-policy'
   params: {
@@ -252,10 +252,10 @@ module frontDoor 'modules/front-door/afd.bicep' = {
 @description('AFD endpoint URL — use this to test the full path')
 output afdEndpointUrl string = 'https://${frontDoor.outputs.afdEndpointHostname}'
 
-@description('AFD Front Door ID — configure in APIM X-Azure-FDID policy')
+@description('AFD Front Door ID — use only if fallback X-Azure-FDID validation is needed')
 output afdFrontDoorId string = frontDoor.outputs.afdFrontDoorId
 
-@description('APIM gateway URL (internal only)')
+@description('APIM gateway URL (PE-only ingress)')
 output apimGatewayUrl string = apim.outputs.apimGatewayUrl
 
 @description('AKS cluster name')
@@ -268,4 +268,4 @@ output keyVaultUri string = keyVault.outputs.keyVaultUri
 output logAnalyticsWorkspaceId string = logAnalytics.outputs.workspaceId
 
 @description('Post-deployment reminder')
-output postDeployNote string = 'IMPORTANT: Approve the AFD Private Endpoint connection on APIM (it will show as Pending). Deploy K8s services with internal LB annotation, then re-deploy with aksLoadBalancerFrontendIpConfigId set.'
+output postDeployNote string = 'IMPORTANT: The CD pipeline auto-approves the AFD Private Endpoint connection on APIM. If you deploy outside the pipeline, approve it manually. Deploy K8s services with internal LB annotation, then re-deploy with aksLoadBalancerFrontendIpConfigId set.'

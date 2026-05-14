@@ -12,12 +12,13 @@
 ```
 ┌──────────────┐     ┌─────────────────────┐     ┌──────────────────┐     ┌─────────────────┐
 │   Internet   │────▶│  Azure Front Door   │────▶│   API Management │────▶│   AKS Cluster   │
-│   (Users)    │     │  (Premium + WAF)    │     │   (Internal VNet)│     │  (Internal LB)  │
+│   (Users)    │     │  (Premium + WAF)    │     │ (PE-only, No     │     │  (Internal LB)  │
+│              │     │                     │     │  Public Access)  │     │                 │
 └──────────────┘     └─────────────────────┘     └──────────────────┘     └─────────────────┘
                           │                           │                         │
                           │ DRS 2.1 + Bot Mgr         │ Private Link            │ Private Link Svc
-                          │ Rate Limiting              │ No Public IP            │ No Public IP
-                          │ TLS 1.2+                   │ stv2 Platform           │ Azure CNI
+                          │ Rate Limiting             │ publicNetworkAccess     │ No Public IP
+                          │ TLS 1.2+                  │ Disabled (stv2)         │ Azure CNI
                           ▼                           ▼                         ▼
                      WAF Policy               Private Endpoint            Internal Load Balancer
                      (Prevention Mode)        (Auto-approved)             (Petstore + Podinfo)
@@ -29,7 +30,7 @@
 |----------|----------|---------|
 | Azure Front Door | Premium | Global L7 load balancer + WAF + Private Link origin |
 | WAF Policy | Prevention | DRS 2.1 + Bot Manager 1.1 managed rules |
-| API Management | Developer (stv2) | Internal-mode API gateway with PE support |
+| API Management | Developer (stv2) | PE-only API gateway with `publicNetworkAccess: Disabled` |
 | AKS Cluster | Standard | Private Kubernetes with Azure CNI |
 | Virtual Network | /16 | 4 subnets: APIM, AKS (/22), PE, Bastion |
 | Key Vault | Standard | RBAC-enabled secrets management |
@@ -68,7 +69,7 @@ az deployment group create \
 # 3. Deploy K8s backends (after AKS is ready)
 cd infra/k8s && chmod +x deploy.sh && ./deploy.sh
 
-# 4. Approve AFD Private Endpoint on APIM (portal or CLI)
+# 4. CD pipeline auto-approves the AFD Private Endpoint on APIM (manual approval only for out-of-band deploys)
 ```
 
 ## Folder Structure
@@ -79,7 +80,7 @@ cd infra/k8s && chmod +x deploy.sh && ./deploy.sh
 │   ├── main.bicepparam         # Default parameters
 │   ├── modules/
 │   │   ├── networking/         # VNet, subnets, NSGs, Bastion
-│   │   ├── apim/               # APIM internal + Private Endpoint
+│   │   ├── apim/               # APIM PE-only gateway + Private Endpoint
 │   │   ├── aks/                # AKS + Private Link Service
 │   │   ├── front-door/         # AFD Premium + WAF + origins
 │   │   ├── monitoring/         # Log Analytics + Diagnostic Settings
@@ -91,7 +92,9 @@ cd infra/k8s && chmod +x deploy.sh && ./deploy.sh
 │       └── deploy.sh           # One-shot K8s deployment script
 ├── docs/
 │   ├── architecture-plan-afd-apim-private.md
-│   └── security-controls.md
+│   ├── security-controls.md
+│   └── decisions/
+│       └── apim-network-access.md
 ├── .github/workflows/
 │   └── build-arm.yml           # Auto-builds ARM JSON from Bicep
 └── README.md
@@ -113,7 +116,7 @@ cd infra/k8s && chmod +x deploy.sh && ./deploy.sh
 
 ## Security Highlights
 
-- ✅ **Zero public IPs** on APIM and AKS — all traffic via Private Link
+- ✅ **APIM `publicNetworkAccess: Disabled`** and **no public IPs on AKS** — all traffic stays on Private Link
 - ✅ **WAF in Prevention mode** — DRS 2.1 + Bot Manager blocks known threats
 - ✅ **TLS 1.2+ enforced** at AFD edge
 - ✅ **NSG microsegmentation** — each subnet has deny-all default + explicit allows
@@ -126,6 +129,7 @@ cd infra/k8s && chmod +x deploy.sh && ./deploy.sh
 
 - [Architecture Deep-Dive](docs/architecture-plan-afd-apim-private.md) — full design rationale
 - [Security Controls](docs/security-controls.md) — compliance mapping
+- [APIM Network Access Decision](docs/decisions/apim-network-access.md) — preferred lockdown and documented fallback
 
 ## Deploy to Azure Button
 
