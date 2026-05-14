@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.42.1.51946",
-      "templateHash": "7891997531381238768"
+      "templateHash": "9540495116784223577"
     }
   },
   "parameters": {
@@ -1700,7 +1700,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.42.1.51946",
-              "templateHash": "3953317063486920565"
+              "templateHash": "14291653932881434090"
             }
           },
           "parameters": {
@@ -1833,9 +1833,9 @@
             "apimPrivateIpAddresses": {
               "type": "array",
               "metadata": {
-                "description": "Private IP addresses of APIM (internal mode)"
+                "description": "Private IP addresses of APIM when VNet-integrated; empty when using Private Endpoint-only connectivity"
               },
-              "value": "[reference(resourceId('Microsoft.ApiManagement/service', variables('apimName')), '2023-05-01-preview').privateIPAddresses]"
+              "value": "[coalesce(tryGet(reference(resourceId('Microsoft.ApiManagement/service', variables('apimName')), '2023-05-01-preview'), 'privateIPAddresses'), createArray())]"
             },
             "apimGatewayUrl": {
               "type": "string",

@@ -100,6 +100,53 @@ jobs:
             -l ${{ env.LOCATION }} \
             --tags environment=dev project=afd-apim-private-demo
 
+      - name: Reconcile AKS (if exists)
+        run: |
+          set -euo pipefail
+
+          AKS_NAME="demo-aks-dev"
+          RESOURCE_ID=$(az resource show \
+            --resource-group "${{ env.RESOURCE_GROUP }}" \
+            --name "$AKS_NAME" \
+            --resource-type Microsoft.ContainerService/managedClusters \
+            --query id \
+            --output tsv 2>/dev/null || true)
+
+          if [ -z "$RESOURCE_ID" ]; then
+            echo "AKS cluster $AKS_NAME not found in ${{ env.RESOURCE_GROUP }}; skipping reconciliation."
+            exit 0
+          fi
+
+          set +e
+          AKS_STATE=$(az aks show \
+            --resource-group "${{ env.RESOURCE_GROUP }}" \
+            --name "$AKS_NAME" \
+            --query provisioningState \
+            --output tsv 2>&1)
+          SHOW_EXIT_CODE=$?
+          set -e
+
+          if [ $SHOW_EXIT_CODE -ne 0 ]; then
+            if echo "$AKS_STATE" | grep -qi "Could not find control plane"; then
+              echo "AKS cluster $AKS_NAME has an orphaned control plane reference; reconciling with az aks update."
+              az aks update --resource-group "${{ env.RESOURCE_GROUP }}" --name "$AKS_NAME"
+              exit 0
+            fi
+
+            echo "$AKS_STATE"
+            exit $SHOW_EXIT_CODE
+          fi
+
+          case "$AKS_STATE" in
+            Failed|Canceled)
+              echo "AKS cluster $AKS_NAME is in provisioningState '$AKS_STATE'; reconciling with az aks update."
+              az aks update --resource-group "${{ env.RESOURCE_GROUP }}" --name "$AKS_NAME"
+              ;;
+            *)
+              echo "AKS cluster $AKS_NAME is in provisioningState '$AKS_STATE'; no reconciliation needed."
+              ;;
+          esac
+
       - name: Deploy Infrastructure
         run: |
           az deployment group create \

@@ -1,5 +1,5 @@
-// Azure API Management — Developer SKU, Internal VNet mode, stv2 platform
-// Internal mode means APIM has no public endpoint — only reachable via Private Endpoint
+// Azure API Management — Private Endpoint connectivity, stv2 platform
+// APIM does not use VNet integration; private access is provided via Private Endpoint
 
 @description('Azure region for APIM')
 param location string
@@ -83,8 +83,8 @@ output apimId string = apimService.id
 @description('Name of the APIM service')
 output apimName string = apimService.name
 
-@description('Private IP addresses of APIM (internal mode)')
-output apimPrivateIpAddresses array = apimService.properties.privateIPAddresses
+@description('Private IP addresses of APIM when VNet-integrated; empty when using Private Endpoint-only connectivity')
+output apimPrivateIpAddresses array = apimService.properties.?privateIPAddresses ?? []
 
 @description('APIM gateway URL')
 output apimGatewayUrl string = apimService.properties.gatewayUrl

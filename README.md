@@ -1,5 +1,8 @@
 # Azure Front Door → APIM → AKS (Private Link) Demo
 
+[![Build ARM Template](https://github.com/Spava-Corp/azure-afd-apim-private-demo/actions/workflows/build-arm-template.yml/badge.svg)](https://github.com/Spava-Corp/azure-afd-apim-private-demo/actions/workflows/build-arm-template.yml)
+[![Deploy Infrastructure](https://github.com/Spava-Corp/azure-afd-apim-private-demo/actions/workflows/deploy-infra.yml/badge.svg)](https://github.com/Spava-Corp/azure-afd-apim-private-demo/actions/workflows/deploy-infra.yml)
+
 [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fx3nc0n%2Fazure-afd-apim-private-demo%2Fmain%2Finfra%2Fmain.json)
 
 > **Zero-trust architecture demo:** All backend traffic flows over Azure Private Link — no public IPs on APIM or AKS.
