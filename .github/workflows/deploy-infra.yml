@@ -129,7 +129,7 @@ jobs:
           if [ $SHOW_EXIT_CODE -ne 0 ]; then
             if echo "$AKS_STATE" | grep -qi "Could not find control plane"; then
               echo "AKS cluster $AKS_NAME has an orphaned control plane reference; reconciling with az aks update."
-              az aks update --resource-group "${{ env.RESOURCE_GROUP }}" --name "$AKS_NAME"
+              az aks update --resource-group "${{ env.RESOURCE_GROUP }}" --name "$AKS_NAME" --yes
               exit 0
             fi
 
@@ -140,7 +140,7 @@ jobs:
           case "$AKS_STATE" in
             Failed|Canceled)
               echo "AKS cluster $AKS_NAME is in provisioningState '$AKS_STATE'; reconciling with az aks update."
-              az aks update --resource-group "${{ env.RESOURCE_GROUP }}" --name "$AKS_NAME"
+              az aks update --resource-group "${{ env.RESOURCE_GROUP }}" --name "$AKS_NAME" --yes
               ;;
             *)
               echo "AKS cluster $AKS_NAME is in provisioningState '$AKS_STATE'; no reconciliation needed."
