@@ -48,9 +48,9 @@
 
 If you deploy with GitHub Actions OIDC, the service principal must have enough RBAC to create Key Vault role assignments during the Bicep deployment.
 
-- Minimum required for the workflow: **Owner** or **User Access Administrator** on the target resource group or subscription
-- **Contributor alone is not sufficient** for `Microsoft.Authorization/roleAssignments/write`
-- The workflow now registers required Azure resource providers automatically on first deploy, including `Microsoft.Cdn` and `Microsoft.Network`
+- **Resource group scope:** **Owner** (or User Access Administrator + Contributor) for Key Vault role assignments (`Microsoft.Authorization/roleAssignments/write`)
+- **Subscription scope:** **Contributor** (or equivalent) is needed for `az provider register` to register resource providers like `Microsoft.Cdn` and `Microsoft.Network`
+- The workflow automatically registers required providers on first deploy
 
 ## Quick Start
 

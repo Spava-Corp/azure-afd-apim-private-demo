@@ -107,10 +107,15 @@ jobs:
 
       - name: Register Resource Providers
         run: |
-          az provider register --namespace Microsoft.Cdn --wait
-          az provider register --namespace Microsoft.Network --wait
-          az provider register --namespace Microsoft.ContainerService --wait
-          az provider register --namespace Microsoft.ApiManagement --wait
+          for ns in Microsoft.Cdn Microsoft.Network Microsoft.ContainerService Microsoft.ApiManagement; do
+            state=$(az provider show --namespace "$ns" --query registrationState -o tsv 2>/dev/null || echo "NotRegistered")
+            if [ "$state" != "Registered" ]; then
+              echo "Registering $ns (current state: $state)..."
+              az provider register --namespace "$ns" --wait
+            else
+              echo "$ns already registered."
+            fi
+          done
 
       - name: Reconcile AKS (if exists)
         run: |
