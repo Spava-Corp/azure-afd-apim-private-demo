@@ -72,6 +72,67 @@ cd infra/k8s && chmod +x deploy.sh && ./deploy.sh
 # 4. CD pipeline auto-approves the AFD Private Endpoint on APIM (manual approval only for out-of-band deploys)
 ```
 
+## Usage & Testing
+
+| Check | What to do | Success looks like |
+|------|------------|--------------------|
+| Find the endpoint | Read the `afdEndpointUrl` deployment output or copy the Front Door endpoint hostname from the Azure portal | You have an HTTPS URL like `https://<prefix>-endpoint-<env>-<hash>.z01.azurefd.net` |
+| Deploy backends | Run `infra/k8s/deploy.sh` after AKS is ready | Internal LB services answer on Petstore `:8080` and Podinfo `:9898` |
+| Configure APIM APIs | Import/configure APIs in APIM so operations route to the AKS internal LB IP | APIM forwards requests to the internal Petstore/Podinfo backends |
+| Test the chain | Send requests to the AFD endpoint only | Traffic flows `AFD → APIM → AKS` |
+| Verify lockdown | Do **not** test APIM directly from the internet | Direct APIM access fails because `publicNetworkAccess: Disabled` |
+
+### Find the Azure Front Door endpoint
+
+```bash
+# Read the deployment output after az deployment group create
+az deployment group show \
+  --resource-group rg-afd-apim-demo \
+  --name <deployment-name> \
+  --query "properties.outputs.afdEndpointUrl.value" \
+  -o tsv
+```
+
+Azure portal: **Resource Group → Deployment → Outputs → `afdEndpointUrl`** or **Front Door profile → Endpoint manager**.
+
+### Test end-to-end connectivity
+
+> AFD routes `/*` to APIM over Private Link. APIM then forwards to the AKS internal load balancer only after the K8s backends are deployed and the APIM APIs are configured.
+
+```bash
+AFD_URL="https://<prefix>-endpoint-<env>-<hash>.z01.azurefd.net"
+
+# Petstore via AFD → APIM → AKS
+curl -i "${AFD_URL}/api/v3/openapi.json"
+
+# Podinfo health via AFD → APIM → AKS
+curl -i "${AFD_URL}/healthz"
+```
+
+| Path | Backend | Expected result |
+|------|---------|-----------------|
+| `/api/v3/openapi.json` | Petstore (`8080`) | `200 OK` with OpenAPI JSON |
+| `/healthz` | Podinfo (`9898`) | `200 OK` with a health response |
+
+### Verify the private link chain
+
+| Scenario | What it usually means |
+|----------|------------------------|
+| `200 OK` from the AFD hostname | The full private path is working: AFD edge → AFD Private Link origin → APIM → AKS |
+| `502 Bad Gateway` / `503 Service Unavailable` at AFD | AFD reached its route, but APIM is not healthy, the private endpoint is not approved, or APIM cannot reach the AKS backend |
+| `403 Forbidden` at AFD | WAF Prevention mode (DRS 2.1 + Bot Manager) blocked the request before it reached APIM |
+| `404` from APIM/AFD | The route exists but the API/operation is not imported or mapped correctly in APIM |
+| Timeout or consistent origin health probe failures | The private link chain is incomplete or the backend service is not listening on the expected path/port |
+
+### Troubleshooting
+
+| Problem | What to check |
+|---------|---------------|
+| AFD private endpoint not approved | In APIM **Private endpoint connections**, confirm the AFD-originated connection is **Approved**. Out-of-band deployments may require manual approval. |
+| APIM not configured | Import/configure the APIs in APIM so `/api/v3/*` points to the Petstore backend and `/healthz` points to Podinfo on the AKS internal LB IP. |
+| K8s backends not deployed | Run `cd infra/k8s && chmod +x deploy.sh && ./deploy.sh`, then verify the internal LB answers on `http://<ILB-IP>:8080/api/v3/openapi.json` and `http://<ILB-IP>:9898/healthz`. |
+| Direct APIM testing fails | Expected. APIM has `publicNetworkAccess: Disabled`, so internet clients must use the AFD endpoint. |
+
 ## Folder Structure
 
 ```
