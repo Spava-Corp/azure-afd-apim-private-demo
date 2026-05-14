@@ -1,8 +1,10 @@
 // Main Bicep Orchestrator — AFD → APIM → AKS (Private Link) Architecture
 // Deploys all modules in correct dependency order
 //
-// Architecture: Internet → AFD (Premium + WAF) → Private Link → APIM (PE-only, public access disabled) → Private Link Service → AKS (Internal LB)
-// All inter-service traffic stays on Azure backbone. APIM public network access is disabled and the backend has no public IP.
+// Architecture: Internet → AFD (Premium + WAF) → Private Link → APIM (FDID-validated, public access enabled) → Private Link Service → AKS (Internal LB)
+// All inter-service traffic stays on Azure backbone. APIM public network access is enabled but
+// protected by a global inbound policy that validates the X-Azure-FDID header from Front Door.
+// Direct APIM access from the internet is blocked at the APIM policy layer.
 //
 // Deployment note: APIM still takes 30-45 minutes to deploy.
 // The CD pipeline auto-approves the AFD Private Endpoint connection; manual approval is for out-of-band deploys.
@@ -176,7 +178,7 @@ module aksPrivateLinkService 'modules/aks/private-link-service.bicep' = if (!emp
 
 // ─── Phase 3: API Management ─────────────────────────────────────────────────
 
-// 3.1 APIM Instance (PE-only, public access disabled)
+// 3.1 APIM Instance (FDID-validated, public access enabled — see docs/decisions/apim-network-access.md)
 module apim 'modules/apim/apim.bicep' = {
   name: 'deploy-apim'
   params: {
@@ -219,7 +221,7 @@ module keyVaultWithApimAccess 'modules/security/key-vault.bicep' = {
 
 // ─── Phase 4: Edge (Azure Front Door) ────────────────────────────────────────
 
-// 4.1 WAF Policy (afdProfileId output is available if fallback header validation is ever needed)
+// 4.1 WAF Policy (includes AFD ID header validation custom rule when afdProfileId is provided)
 module wafPolicy 'modules/front-door/waf-policy.bicep' = {
   name: 'deploy-waf-policy'
   params: {
@@ -227,7 +229,7 @@ module wafPolicy 'modules/front-door/waf-policy.bicep' = {
     environment: environment
     policyMode: wafMode
     rateLimitThreshold: rateLimitThreshold
-    afdProfileId: '' // Populated post-deployment via parameter override or redeployment
+    afdProfileId: '' // Two-phase: redeploy with frontDoor.outputs.afdFrontDoorId to activate WAF-side FDID check
     tags: tags
   }
 }
@@ -245,6 +247,19 @@ module frontDoor 'modules/front-door/afd.bicep' = {
   }
 }
 
+// ─── Phase 5: Cross-service Policies ─────────────────────────────────────────
+
+// 5.1 APIM global inbound policy — validates X-Azure-FDID header
+// Deployed after AFD so the frontDoorId is available. This blocks any request
+// to APIM that doesn't arrive through the correct Front Door instance.
+module apimFdidPolicy 'modules/apim/apim-fdid-policy.bicep' = {
+  name: 'deploy-apim-fdid-policy'
+  params: {
+    apimName: apim.outputs.apimName
+    frontDoorId: frontDoor.outputs.afdFrontDoorId
+  }
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // OUTPUTS
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -252,10 +267,10 @@ module frontDoor 'modules/front-door/afd.bicep' = {
 @description('AFD endpoint URL — use this to test the full path')
 output afdEndpointUrl string = 'https://${frontDoor.outputs.afdEndpointHostname}'
 
-@description('AFD Front Door ID — use only if fallback X-Azure-FDID validation is needed')
+@description('AFD Front Door ID — used for X-Azure-FDID header validation on APIM')
 output afdFrontDoorId string = frontDoor.outputs.afdFrontDoorId
 
-@description('APIM gateway URL (PE-only ingress)')
+@description('APIM gateway URL (FDID-validated ingress)')
 output apimGatewayUrl string = apim.outputs.apimGatewayUrl
 
 @description('AKS cluster name')

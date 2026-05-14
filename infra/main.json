@@ -4,8 +4,8 @@
   "metadata": {
     "_generator": {
       "name": "bicep",
-      "version": "0.43.8.12551",
-      "templateHash": "10804517126014233148"
+      "version": "0.42.1.51946",
+      "templateHash": "4627653145607232840"
     }
   },
   "parameters": {
@@ -193,8 +193,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.43.8.12551",
-              "templateHash": "10499185893036737495"
+              "version": "0.42.1.51946",
+              "templateHash": "5298728997577386948"
             }
           },
           "parameters": {
@@ -340,8 +340,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.43.8.12551",
-              "templateHash": "7494981141338829500"
+              "version": "0.42.1.51946",
+              "templateHash": "12650480053001397241"
             }
           },
           "parameters": {
@@ -1018,8 +1018,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.43.8.12551",
-              "templateHash": "17034892790159660631"
+              "version": "0.42.1.51946",
+              "templateHash": "8902488565896534074"
             }
           },
           "parameters": {
@@ -1166,8 +1166,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.43.8.12551",
-              "templateHash": "5626218360697562766"
+              "version": "0.42.1.51946",
+              "templateHash": "7601883051760901723"
             }
           },
           "parameters": {
@@ -1339,8 +1339,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.43.8.12551",
-              "templateHash": "16012052588285352605"
+              "version": "0.42.1.51946",
+              "templateHash": "12353327468469023590"
             }
           },
           "parameters": {
@@ -1543,8 +1543,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.43.8.12551",
-              "templateHash": "6474809318973335034"
+              "version": "0.42.1.51946",
+              "templateHash": "18387285666724379304"
             }
           },
           "parameters": {
@@ -1699,8 +1699,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.43.8.12551",
-              "templateHash": "6102057377495079156"
+              "version": "0.42.1.51946",
+              "templateHash": "18230108333876895028"
             }
           },
           "parameters": {
@@ -1788,7 +1788,7 @@
                 "publisherEmail": "[parameters('publisherEmail')]",
                 "publisherName": "[parameters('publisherName')]",
                 "virtualNetworkType": "None",
-                "publicNetworkAccess": "Disabled"
+                "publicNetworkAccess": "Enabled"
               }
             },
             {
@@ -1897,8 +1897,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.43.8.12551",
-              "templateHash": "7757159408810036417"
+              "version": "0.42.1.51946",
+              "templateHash": "5842976306602421718"
             }
           },
           "parameters": {
@@ -2055,8 +2055,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.43.8.12551",
-              "templateHash": "5626218360697562766"
+              "version": "0.42.1.51946",
+              "templateHash": "7601883051760901723"
             }
           },
           "parameters": {
@@ -2222,8 +2222,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.43.8.12551",
-              "templateHash": "3005782595406279488"
+              "version": "0.42.1.51946",
+              "templateHash": "13607097063193257108"
             }
           },
           "parameters": {
@@ -2394,8 +2394,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.43.8.12551",
-              "templateHash": "2891019259925736082"
+              "version": "0.42.1.51946",
+              "templateHash": "8902782067790093144"
             }
           },
           "parameters": {
@@ -2602,6 +2602,68 @@
         "[resourceId('Microsoft.Resources/deployments', 'deploy-apim')]",
         "[resourceId('Microsoft.Resources/deployments', 'deploy-waf-policy')]"
       ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "deploy-apim-fdid-policy",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "apimName": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-apim'), '2025-04-01').outputs.apimName.value]"
+          },
+          "frontDoorId": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-front-door'), '2025-04-01').outputs.afdFrontDoorId.value]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.42.1.51946",
+              "templateHash": "18262580844892616421"
+            }
+          },
+          "parameters": {
+            "apimName": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the existing APIM service"
+              }
+            },
+            "frontDoorId": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure Front Door profile ID (GUID) for X-Azure-FDID header validation"
+              }
+            }
+          },
+          "variables": {
+            "policyXml": "[replace('<policies>\r\n  <inbound>\r\n    <check-header name=\"X-Azure-FDID\" failed-check-httpcode=\"403\" failed-check-error-message=\"Access denied - request must arrive through Azure Front Door.\" ignore-case=\"true\">\r\n      <value>__FDID__</value>\r\n    </check-header>\r\n    <base />\r\n  </inbound>\r\n  <backend>\r\n    <base />\r\n  </backend>\r\n  <outbound>\r\n    <base />\r\n  </outbound>\r\n  <on-error>\r\n    <base />\r\n  </on-error>\r\n</policies>', '__FDID__', parameters('frontDoorId'))]"
+          },
+          "resources": [
+            {
+              "type": "Microsoft.ApiManagement/service/policies",
+              "apiVersion": "2023-05-01-preview",
+              "name": "[format('{0}/{1}', parameters('apimName'), 'policy')]",
+              "properties": {
+                "format": "xml",
+                "value": "[variables('policyXml')]"
+              }
+            }
+          ]
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Resources/deployments', 'deploy-apim')]",
+        "[resourceId('Microsoft.Resources/deployments', 'deploy-front-door')]"
+      ]
     }
   ],
   "outputs": {
@@ -2615,14 +2677,14 @@
     "afdFrontDoorId": {
       "type": "string",
       "metadata": {
-        "description": "AFD Front Door ID — use only if fallback X-Azure-FDID validation is needed"
+        "description": "AFD Front Door ID — used for X-Azure-FDID header validation on APIM"
       },
       "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-front-door'), '2025-04-01').outputs.afdFrontDoorId.value]"
     },
     "apimGatewayUrl": {
       "type": "string",
       "metadata": {
-        "description": "APIM gateway URL (PE-only ingress)"
+        "description": "APIM gateway URL (FDID-validated ingress)"
       },
       "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-apim'), '2025-04-01').outputs.apimGatewayUrl.value]"
     },

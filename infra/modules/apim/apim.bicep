@@ -1,5 +1,6 @@
-// Azure API Management — Private Endpoint connectivity, stv2 platform
-// APIM does not use VNet integration; private access is provided via Private Endpoint
+// Azure API Management — X-Azure-FDID validated ingress, stv2 platform
+// Public network access is enabled but protected by a global inbound policy
+// that rejects any request not carrying the correct AFD profile ID header.
 
 @description('Azure region for APIM')
 param location string
@@ -46,9 +47,11 @@ resource apimService 'Microsoft.ApiManagement/service@2023-05-01-preview' = {
     publisherEmail: publisherEmail
     publisherName: publisherName
     virtualNetworkType: 'None'
-    publicNetworkAccess: 'Disabled'
-    // Preferred zero-trust posture: APIM is reachable only through the approved Private Endpoint path from AFD.
-    // If Azure shared Private Link provisioning fails in a given region or SKU, fall back to X-Azure-FDID validation.
+    publicNetworkAccess: 'Enabled'
+    // Fallback mode: publicNetworkAccess re-enabled because AFD shared Private Link
+    // health probes fail on Developer SKU when public access is fully disabled.
+    // Origin-bypass protection is enforced via APIM global inbound policy (X-Azure-FDID
+    // header validation) and WAF custom rule. See docs/decisions/apim-network-access.md.
   }
 }
 

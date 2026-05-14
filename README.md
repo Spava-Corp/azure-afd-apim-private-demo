@@ -5,23 +5,23 @@
 
 [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fx3nc0n%2Fazure-afd-apim-private-demo%2Fmain%2Finfra%2Fmain.json)
 
-> **Zero-trust architecture demo:** All backend traffic flows over Azure Private Link — no public IPs on APIM or AKS.
+> **Zero-trust architecture demo:** All backend traffic flows over Azure Private Link — no public IPs on AKS. APIM public access is enabled but locked down by X-Azure-FDID header validation (see [why](docs/decisions/apim-network-access.md)).
 
 ## Architecture
 
 ```
 ┌──────────────┐     ┌─────────────────────┐     ┌──────────────────┐     ┌─────────────────┐
 │   Internet   │────▶│  Azure Front Door   │────▶│   API Management │────▶│   AKS Cluster   │
-│   (Users)    │     │  (Premium + WAF)    │     │ (PE-only, No     │     │  (Internal LB)  │
+│   (Users)    │     │  (Premium + WAF)    │     │ (FDID-validated  │     │  (Internal LB)  │
 │              │     │                     │     │  Public Access)  │     │                 │
 └──────────────┘     └─────────────────────┘     └──────────────────┘     └─────────────────┘
                           │                           │                         │
-                          │ DRS 2.1 + Bot Mgr         │ Private Link            │ Private Link Svc
-                          │ Rate Limiting             │ publicNetworkAccess     │ No Public IP
-                          │ TLS 1.2+                  │ Disabled (stv2)         │ Azure CNI
+                          │ DRS 2.1 + Bot Mgr         │ Private Link +          │ Private Link Svc
+                          │ Rate Limiting             │ X-Azure-FDID policy    │ No Public IP
+                          │ TLS 1.2+                  │ (stv2, Developer)      │ Azure CNI
                           ▼                           ▼                         ▼
-                     WAF Policy               Private Endpoint            Internal Load Balancer
-                     (Prevention Mode)        (Auto-approved)             (Petstore + Podinfo)
+                     WAF Policy               Global check-header         Internal Load Balancer
+                     (Prevention Mode)        policy (403 if no FDID)     (Petstore + Podinfo)
 ```
 
 ## What Gets Deployed
@@ -30,7 +30,7 @@
 |----------|----------|---------|
 | Azure Front Door | Premium | Global L7 load balancer + WAF + Private Link origin |
 | WAF Policy | Prevention | DRS 2.1 + Bot Manager 1.1 managed rules |
-| API Management | Developer (stv2) | PE-only API gateway with `publicNetworkAccess: Disabled` |
+| API Management | Developer (stv2) | FDID-validated API gateway with `publicNetworkAccess: Enabled` + `check-header` policy |
 | AKS Cluster | Standard | Private Kubernetes with Azure CNI |
 | Virtual Network | /16 | 4 subnets: APIM, AKS (/22), PE, Bastion |
 | Key Vault | Standard | RBAC-enabled secrets management |
@@ -80,7 +80,7 @@ cd infra/k8s && chmod +x deploy.sh && ./deploy.sh
 | Deploy backends | Run `infra/k8s/deploy.sh` after AKS is ready | Internal LB services answer on Petstore `:8080` and Podinfo `:9898` |
 | Configure APIM APIs | Import/configure APIs in APIM so operations route to the AKS internal LB IP | APIM forwards requests to the internal Petstore/Podinfo backends |
 | Test the chain | Send requests to the AFD endpoint only | Traffic flows `AFD → APIM → AKS` |
-| Verify lockdown | Do **not** test APIM directly from the internet | Direct APIM access fails because `publicNetworkAccess: Disabled` |
+| Verify lockdown | Try APIM directly from the internet | Direct APIM access returns `403` because the global inbound policy rejects requests without the correct `X-Azure-FDID` header |
 
 ### Find the Azure Front Door endpoint
 
@@ -131,7 +131,7 @@ curl -i "${AFD_URL}/healthz"
 | AFD private endpoint not approved | In APIM **Private endpoint connections**, confirm the AFD-originated connection is **Approved**. Out-of-band deployments may require manual approval. |
 | APIM not configured | Import/configure the APIs in APIM so `/api/v3/*` points to the Petstore backend and `/healthz` points to Podinfo on the AKS internal LB IP. |
 | K8s backends not deployed | Run `cd infra/k8s && chmod +x deploy.sh && ./deploy.sh`, then verify the internal LB answers on `http://<ILB-IP>:8080/api/v3/openapi.json` and `http://<ILB-IP>:9898/healthz`. |
-| Direct APIM testing fails | Expected. APIM has `publicNetworkAccess: Disabled`, so internet clients must use the AFD endpoint. |
+| Direct APIM testing returns 403 | Expected. APIM's global inbound policy rejects requests without the correct `X-Azure-FDID` header. Traffic must go through AFD. |
 
 ## Folder Structure
 
@@ -141,7 +141,7 @@ curl -i "${AFD_URL}/healthz"
 │   ├── main.bicepparam         # Default parameters
 │   ├── modules/
 │   │   ├── networking/         # VNet, subnets, NSGs, Bastion
-│   │   ├── apim/               # APIM PE-only gateway + Private Endpoint
+│   │   ├── apim/               # APIM gateway + Private Endpoint + FDID policy
 │   │   ├── aks/                # AKS + Private Link Service
 │   │   ├── front-door/         # AFD Premium + WAF + origins
 │   │   ├── monitoring/         # Log Analytics + Diagnostic Settings
@@ -177,7 +177,8 @@ curl -i "${AFD_URL}/healthz"
 
 ## Security Highlights
 
-- ✅ **APIM `publicNetworkAccess: Disabled`** and **no public IPs on AKS** — all traffic stays on Private Link
+- ✅ **APIM `X-Azure-FDID` validation** — global inbound policy blocks direct access; only requests through the correct AFD instance are accepted ([why not `publicNetworkAccess: Disabled`?](docs/decisions/apim-network-access.md))
+- ✅ **No public IPs on AKS** — all traffic stays on Private Link
 - ✅ **WAF in Prevention mode** — DRS 2.1 + Bot Manager blocks known threats
 - ✅ **TLS 1.2+ enforced** at AFD edge
 - ✅ **NSG microsegmentation** — each subnet has deny-all default + explicit allows
