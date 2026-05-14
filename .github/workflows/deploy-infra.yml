@@ -171,3 +171,74 @@ jobs:
             --template-file infra/main.bicep \
             --parameters infra/main.bicepparam \
             --name "gha-deploy-${{ github.run_number }}"
+
+      - name: Approve AFD private endpoint connections on APIM
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          apim_resources_json=$(az resource list \
+            --resource-group "${{ env.RESOURCE_GROUP }}" \
+            --resource-type Microsoft.ApiManagement/service \
+            --output json)
+
+          APIM_NAME="$(APIM_RESOURCES_JSON="$apim_resources_json" python3 - <<'PY'
+import json
+import os
+import sys
+
+prefix = 'demo-apim-dev'
+resources = json.loads(os.environ['APIM_RESOURCES_JSON'])
+matches = [resource['name'] for resource in resources if resource.get('name', '').startswith(prefix)]
+
+if len(matches) != 1:
+    print(
+        f"Expected exactly one APIM resource starting with {prefix!r}, found {len(matches)}: {matches}",
+        file=sys.stderr,
+    )
+    sys.exit(1)
+
+print(matches[0])
+PY
+          )"
+
+          echo "Checking pending private endpoint connections on APIM service: $APIM_NAME"
+
+          pe_connections_json=$(az network private-endpoint-connection list \
+            --resource-group "${{ env.RESOURCE_GROUP }}" \
+            --type Microsoft.ApiManagement/service \
+            --name "$APIM_NAME" \
+            --output json)
+
+          matching_connections="$(PE_CONNECTIONS_JSON="$pe_connections_json" python3 - <<'PY'
+import json
+import os
+
+connections = json.loads(os.environ['PE_CONNECTIONS_JSON'])
+
+for connection in connections:
+    properties = connection.get('properties') or {}
+    state = properties.get('privateLinkServiceConnectionState') or {}
+    status = (state.get('status') or '').lower()
+    description = state.get('description') or ''
+    request_message = properties.get('requestMessage') or ''
+    match_text = f'{description} {request_message}'.lower()
+
+    if status == 'pending' and ('afd' in match_text or 'front door' in match_text):
+        summary = description or request_message or 'AFD-related request'
+        print(f"{connection['id']}\t{summary}")
+PY
+          )"
+
+          if [ -z "$matching_connections" ]; then
+            echo "No pending AFD private endpoint approvals found on APIM."
+            exit 0
+          fi
+
+          while IFS=$'\t' read -r connection_id connection_summary; do
+            [ -n "$connection_id" ] || continue
+            echo "Approving $connection_id ($connection_summary)"
+            az network private-endpoint-connection approve \
+              --id "$connection_id" \
+              --description "Approved by GitHub Actions after AFD deployment"
+          done <<< "$matching_connections"
