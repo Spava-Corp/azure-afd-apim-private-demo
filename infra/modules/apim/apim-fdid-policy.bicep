@@ -13,22 +13,16 @@ resource apimService 'Microsoft.ApiManagement/service@2023-05-01-preview' existi
   name: apimName
 }
 
+// Global policies do not support <base /> — there is no parent policy to inherit from.
 var policyXml = replace('''<policies>
   <inbound>
     <check-header name="X-Azure-FDID" failed-check-httpcode="403" failed-check-error-message="Access denied - request must arrive through Azure Front Door." ignore-case="true">
       <value>__FDID__</value>
     </check-header>
-    <base />
   </inbound>
-  <backend>
-    <base />
-  </backend>
-  <outbound>
-    <base />
-  </outbound>
-  <on-error>
-    <base />
-  </on-error>
+  <backend />
+  <outbound />
+  <on-error />
 </policies>''', '__FDID__', frontDoorId)
 
 resource globalPolicy 'Microsoft.ApiManagement/service/policies@2023-05-01-preview' = {
