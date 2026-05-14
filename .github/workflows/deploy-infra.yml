@@ -20,6 +20,11 @@ permissions:
   id-token: write
   contents: read
 
+# Prerequisite: the GitHub Actions OIDC service principal must have Owner or
+# User Access Administrator on the target resource group or subscription.
+# The deployment creates Key Vault RBAC role assignments, which Contributor
+# alone cannot write.
+
 env:
   RESOURCE_GROUP: rg-afd-apim-private-demo-dev-wus2
   LOCATION: westus2
@@ -99,6 +104,13 @@ jobs:
             -n ${{ env.RESOURCE_GROUP }} \
             -l ${{ env.LOCATION }} \
             --tags environment=dev project=afd-apim-private-demo
+
+      - name: Register Resource Providers
+        run: |
+          az provider register --namespace Microsoft.Cdn --wait
+          az provider register --namespace Microsoft.Network --wait
+          az provider register --namespace Microsoft.ContainerService --wait
+          az provider register --namespace Microsoft.ApiManagement --wait
 
       - name: Reconcile AKS (if exists)
         run: |

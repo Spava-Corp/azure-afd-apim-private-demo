@@ -38,11 +38,19 @@
 
 ## Prerequisites
 
-- Azure subscription with Owner or Contributor role
+- Azure subscription with Owner or Contributor role for interactive/manual deployment
 - [Azure CLI](https://docs.microsoft.com/cli/azure/install-azure-cli) v2.50+
 - [kubectl](https://kubernetes.io/docs/tasks/tools/) v1.27+
 - [Helm](https://helm.sh/docs/intro/install/) v3.12+
 - [Bicep CLI](https://learn.microsoft.com/azure/azure-resource-manager/bicep/install) (bundled with Azure CLI)
+
+### GitHub Actions deployment prerequisites
+
+If you deploy with GitHub Actions OIDC, the service principal must have enough RBAC to create Key Vault role assignments during the Bicep deployment.
+
+- Minimum required for the workflow: **Owner** or **User Access Administrator** on the target resource group or subscription
+- **Contributor alone is not sufficient** for `Microsoft.Authorization/roleAssignments/write`
+- The workflow now registers required Azure resource providers automatically on first deploy, including `Microsoft.Cdn` and `Microsoft.Network`
 
 ## Quick Start
 
