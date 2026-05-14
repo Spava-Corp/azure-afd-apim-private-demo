@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.42.1.51946",
-      "templateHash": "7554802434397953879"
+      "templateHash": "17137663271801924418"
     }
   },
   "parameters": {
@@ -2634,7 +2634,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.42.1.51946",
-              "templateHash": "11336874101679972200"
+              "templateHash": "10135780126497507993"
             }
           },
           "parameters": {
@@ -2652,7 +2652,7 @@
             }
           },
           "variables": {
-            "policyXml": "[replace('<policies>\r\n  <inbound>\r\n    <check-header name=\"X-Azure-FDID\" failed-check-httpcode=\"403\" failed-check-error-message=\"Access denied - request must arrive through Azure Front Door.\" ignore-case=\"true\">\r\n      <value>__FDID__</value>\r\n    </check-header>\r\n  </inbound>\r\n  <backend />\r\n  <outbound />\r\n  <on-error />\r\n</policies>', '__FDID__', parameters('frontDoorId'))]"
+            "policyXml": "[replace('<policies>\n  <inbound>\n    <check-header name=\"X-Azure-FDID\" failed-check-httpcode=\"403\" failed-check-error-message=\"Access denied - request must arrive through Azure Front Door.\" ignore-case=\"true\">\n      <value>__FDID__</value>\n    </check-header>\n  </inbound>\n  <backend />\n  <outbound />\n  <on-error />\n</policies>', '__FDID__', parameters('frontDoorId'))]"
           },
           "resources": [
             {
