@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.43.8.12551",
-      "templateHash": "13722227955626349290"
+      "templateHash": "10804517126014233148"
     }
   },
   "parameters": {
@@ -2379,7 +2379,7 @@
             "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-waf-policy'), '2025-04-01').outputs.wafPolicyId.value]"
           },
           "apimHostname": {
-            "value": "[format('{0}-apim-{1}.azure-api.net', parameters('prefix'), parameters('environment'))]"
+            "value": "[format('{0}.azure-api.net', reference(resourceId('Microsoft.Resources/deployments', 'deploy-apim'), '2025-04-01').outputs.apimName.value)]"
           },
           "apimPrivateLinkServiceId": {
             "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-apim'), '2025-04-01').outputs.apimId.value]"
