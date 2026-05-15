@@ -172,27 +172,57 @@ jobs:
             --parameters infra/main.bicepparam \
             --name "gha-deploy-${{ github.run_number }}"
 
-      - name: Get AKS credentials
-        run: |
-          az aks get-credentials \
-            --resource-group ${{ env.RESOURCE_GROUP }} \
-            --name demo-aks-dev \
-            --overwrite-existing
-
       - name: Deploy K8s services (Petstore, Podinfo, Internal LB)
         id: k8s_deploy
         run: |
-          chmod +x infra/k8s/deploy.sh
-          infra/k8s/deploy.sh demo-apis demo
+          set -euo pipefail
+          RG="${{ env.RESOURCE_GROUP }}"
+          AKS="demo-aks-dev"
+
+          az aks command invoke \
+            --resource-group "$RG" \
+            --name "$AKS" \
+            --command "kubectl create namespace demo-apis --dry-run=client -o yaml | kubectl apply -f -"
+
+          az aks command invoke \
+            --resource-group "$RG" \
+            --name "$AKS" \
+            --command "helm upgrade --install demo-petstore ./petstore -n demo-apis --set replicaCount=2 --wait --timeout 120s" \
+            --file infra/k8s/petstore/
+
+          az aks command invoke \
+            --resource-group "$RG" \
+            --name "$AKS" \
+            --command "helm upgrade --install demo-podinfo ./podinfo -n demo-apis --set replicaCount=2 --wait --timeout 120s" \
+            --file infra/k8s/podinfo/
+
+          az aks command invoke \
+            --resource-group "$RG" \
+            --name "$AKS" \
+            --command "helm upgrade --install demo-internal-lb ./internal-lb -n demo-apis --wait --timeout 120s" \
+            --file infra/k8s/internal-lb/
 
       - name: Discover internal LB IP and frontend IP config ID
         id: discover_lb
         if: steps.k8s_deploy.outcome == 'success'
         run: |
           set -euo pipefail
+          RG="${{ env.RESOURCE_GROUP }}"
+          AKS="demo-aks-dev"
 
-          LB_IP=$(kubectl get svc demo-internal-lb-petstore -n demo-apis \
-            -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+          LB_IP=""
+          for i in $(seq 1 24); do
+            LB_IP=$(az aks command invoke \
+              --resource-group "$RG" \
+              --name "$AKS" \
+              --command "kubectl get svc demo-internal-lb-petstore -n demo-apis -o jsonpath='{.status.loadBalancer.ingress[0].ip}'" \
+              --query "logs" -o tsv | tr -d '[:space:]')
+            if [ -n "$LB_IP" ] && [ "$LB_IP" != "<none>" ]; then
+              break
+            fi
+            echo "Waiting for LB IP... ($i/24)"
+            sleep 5
+          done
 
           if [ -z "$LB_IP" ]; then
             echo "ERROR: Could not discover internal LB IP from service demo-internal-lb-petstore"
@@ -201,8 +231,8 @@ jobs:
           echo "Discovered LB IP: $LB_IP"
 
           NODE_RG=$(az aks show \
-            --resource-group ${{ env.RESOURCE_GROUP }} \
-            --name demo-aks-dev \
+            --resource-group "$RG" \
+            --name "$AKS" \
             --query nodeResourceGroup -o tsv)
 
           LB_NAME=$(az network lb list -g "$NODE_RG" \
