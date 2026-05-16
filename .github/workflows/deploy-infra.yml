@@ -187,19 +187,19 @@ jobs:
           (cd infra/k8s/petstore && az aks command invoke \
             --resource-group "$RG" \
             --name "$AKS" \
-            --command "helm upgrade --install demo-petstore . -n demo-apis --set replicaCount=2 --wait --timeout 120s" \
+            --command "helm upgrade --install demo-petstore . -n demo-apis --create-namespace --set replicaCount=2 --wait --timeout 300s" \
             --file .)
 
           (cd infra/k8s/podinfo && az aks command invoke \
             --resource-group "$RG" \
             --name "$AKS" \
-            --command "helm upgrade --install demo-podinfo . -n demo-apis --set replicaCount=2 --wait --timeout 120s" \
+            --command "helm upgrade --install demo-podinfo . -n demo-apis --create-namespace --set replicaCount=2 --wait --timeout 300s" \
             --file .)
 
           (cd infra/k8s/internal-lb && az aks command invoke \
             --resource-group "$RG" \
             --name "$AKS" \
-            --command "helm upgrade --install demo-internal-lb . -n demo-apis --wait --timeout 120s" \
+            --command "helm upgrade --install demo-internal-lb . -n demo-apis --create-namespace --wait --timeout 300s" \
             --file .)
 
       - name: Discover internal LB IP and frontend IP config ID
@@ -215,17 +215,17 @@ jobs:
             LB_IP=$(az aks command invoke \
               --resource-group "$RG" \
               --name "$AKS" \
-              --command "kubectl get svc demo-internal-lb-petstore -n demo-apis -o jsonpath='{.status.loadBalancer.ingress[0].ip}'" \
+              --command "kubectl get svc demo-internal-lb -n demo-apis -o jsonpath='{.status.loadBalancer.ingress[0].ip}'" \
               --query "logs" -o tsv | tr -d '[:space:]')
             if [ -n "$LB_IP" ] && [ "$LB_IP" != "<none>" ]; then
               break
             fi
             echo "Waiting for LB IP... ($i/24)"
-            sleep 5
+            sleep 10
           done
 
           if [ -z "$LB_IP" ]; then
-            echo "ERROR: Could not discover internal LB IP from service demo-internal-lb-petstore"
+            echo "ERROR: Could not discover internal LB IP from service demo-internal-lb"
             exit 1
           fi
           echo "Discovered LB IP: $LB_IP"
@@ -235,16 +235,12 @@ jobs:
             --name "$AKS" \
             --query nodeResourceGroup -o tsv)
 
-          LB_NAME=$(az network lb list -g "$NODE_RG" \
-            --query "[?contains(name,'internal')].name" -o tsv)
-
-          FRONTEND_IP_CONFIG_ID=$(az network lb frontend-ip list \
-            -g "$NODE_RG" \
-            --lb-name "$LB_NAME" \
-            --query "[?privateIPAddress=='${LB_IP}'].id" -o tsv)
+          # Find the LB that has our discovered IP as a frontend
+          FRONTEND_IP_CONFIG_ID=$(az network lb list -g "$NODE_RG" \
+            --query "[].frontendIPConfigurations[?privateIPAddress=='${LB_IP}'].id | []" -o tsv | head -1)
 
           if [ -z "$FRONTEND_IP_CONFIG_ID" ]; then
-            echo "ERROR: Could not find frontend IP config for IP $LB_IP in LB $LB_NAME"
+            echo "ERROR: Could not find frontend IP config for IP $LB_IP in node resource group $NODE_RG"
             exit 1
           fi
           echo "Discovered frontend IP config ID: $FRONTEND_IP_CONFIG_ID"
