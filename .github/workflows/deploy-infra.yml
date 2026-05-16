@@ -184,23 +184,23 @@ jobs:
             --name "$AKS" \
             --command "kubectl create namespace demo-apis --dry-run=client -o yaml | kubectl apply -f -"
 
-          az aks command invoke \
+          (cd infra/k8s/petstore && az aks command invoke \
             --resource-group "$RG" \
             --name "$AKS" \
-            --command "helm upgrade --install demo-petstore ./petstore -n demo-apis --set replicaCount=2 --wait --timeout 120s" \
-            --file infra/k8s/petstore/
+            --command "helm upgrade --install demo-petstore . -n demo-apis --set replicaCount=2 --wait --timeout 120s" \
+            --file .)
 
-          az aks command invoke \
+          (cd infra/k8s/podinfo && az aks command invoke \
             --resource-group "$RG" \
             --name "$AKS" \
-            --command "helm upgrade --install demo-podinfo ./podinfo -n demo-apis --set replicaCount=2 --wait --timeout 120s" \
-            --file infra/k8s/podinfo/
+            --command "helm upgrade --install demo-podinfo . -n demo-apis --set replicaCount=2 --wait --timeout 120s" \
+            --file .)
 
-          az aks command invoke \
+          (cd infra/k8s/internal-lb && az aks command invoke \
             --resource-group "$RG" \
             --name "$AKS" \
-            --command "helm upgrade --install demo-internal-lb ./internal-lb -n demo-apis --wait --timeout 120s" \
-            --file infra/k8s/internal-lb/
+            --command "helm upgrade --install demo-internal-lb . -n demo-apis --wait --timeout 120s" \
+            --file .)
 
       - name: Discover internal LB IP and frontend IP config ID
         id: discover_lb
