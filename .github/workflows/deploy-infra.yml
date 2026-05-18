@@ -221,9 +221,10 @@ jobs:
       - name: Remove stale AFD Private Link origin
         run: |
           set -euo pipefail
-          # The AFD origin may still have a sharedPrivateLinkResource from a previous
-          # deployment. This causes 504s because AFD tries to route via a deleted PL.
-          # Force-update the origin to remove the shared private link resource.
+          # The AFD origin has a sharedPrivateLinkResource from a previous deployment.
+          # This creates a PE on APIM which blocks VNet mode. We must DELETE the origin
+          # entirely — az afd origin update cannot clear the shared PL field.
+          # Bicep will recreate the origin cleanly without a PL.
           AFD_PROFILE=$(az afd profile list \
             --resource-group "${{ env.RESOURCE_GROUP }}" \
             --query "[?starts_with(name,'demo-afd-dev')].name" -o tsv 2>/dev/null || true)
@@ -237,19 +238,36 @@ jobs:
               --profile-name "$AFD_PROFILE" \
               --origin-group-name apim-origin-group \
               --origin-name apim-private-link-origin \
-              --query "sharedPrivateLinkResource" -o tsv 2>/dev/null || true)
+              --query "sharedPrivateLinkResource.privateLink.id" -o tsv 2>/dev/null || true)
 
-            if [ -n "$ORIGIN_PL" ] && [ "$ORIGIN_PL" != "None" ]; then
-              echo "Stale PL found on AFD origin. Updating origin to remove it..."
-              az afd origin update \
+            if [ -n "$ORIGIN_PL" ]; then
+              echo "Stale PL found on AFD origin. Deleting origin so Bicep can recreate cleanly..."
+              az afd origin delete \
                 --resource-group "${{ env.RESOURCE_GROUP }}" \
                 --profile-name "$AFD_PROFILE" \
                 --origin-group-name apim-origin-group \
                 --origin-name apim-private-link-origin \
-                --shared-private-link-resource "" \
-                2>&1 || echo "Warning: origin update failed, Bicep will handle it"
+                --yes 2>&1 || echo "Warning: origin delete failed"
+              echo "Waiting 30s for PE cleanup to propagate to APIM..."
+              sleep 30
+              # Re-run APIM PE cleanup since deleting AFD origin removes the PE asynchronously
+              APIM_NAME=$(az resource list \
+                --resource-group "${{ env.RESOURCE_GROUP }}" \
+                --resource-type Microsoft.ApiManagement/service \
+                --query "[?starts_with(name,'demo-apim-dev')].name" -o tsv 2>/dev/null || true)
+              if [ -n "$APIM_NAME" ]; then
+                pe_ids=$(az network private-endpoint-connection list \
+                  --resource-group "${{ env.RESOURCE_GROUP }}" \
+                  --type Microsoft.ApiManagement/service \
+                  --name "$APIM_NAME" \
+                  --query "[].id" -o tsv 2>/dev/null || true)
+                for pe_id in $pe_ids; do
+                  echo "Cleaning residual PE connection: $pe_id"
+                  az network private-endpoint-connection delete --id "$pe_id" --yes 2>&1 || true
+                done
+              fi
             else
-              echo "No stale Private Link on AFD origin."
+              echo "No stale Private Link on AFD origin — origin is clean."
             fi
           fi
 
