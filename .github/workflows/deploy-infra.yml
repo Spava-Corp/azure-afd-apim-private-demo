@@ -179,18 +179,37 @@ jobs:
           RG="${{ env.RESOURCE_GROUP }}"
           AKS="demo-aks-dev"
 
-          # Retry helper — az aks command invoke has a known bug where it returns
-          # "ERROR: Operation returned an invalid status 'OK'" on success.
+          # Retry helper that checks BOTH exit code AND output for errors.
+          # az aks command invoke returns exit 0 even when the inner command fails,
+          # so we must inspect the logs output for error patterns.
           invoke_with_retry() {
-            local retries=3
+            local retries=5
+            local delay=20
+            local tmpfile
+            tmpfile=$(mktemp)
             for i in $(seq 1 $retries); do
-              if "$@"; then
+              set +e
+              "$@" --query logs -o tsv > "$tmpfile" 2>&1
+              local rc=$?
+              set -e
+              local output
+              output=$(cat "$tmpfile")
+
+              # Check for known transient/false errors
+              if [ $rc -eq 0 ] && ! echo "$output" | grep -qiE "^Error:|error validating|cluster unreachable|failed to download openapi|AADSTS"; then
+                echo "$output"
+                rm -f "$tmpfile"
                 return 0
               fi
-              echo "⚠️  az aks command invoke failed (attempt $i/$retries), retrying in 15s..."
-              sleep 15
+              echo "⚠️  Attempt $i/$retries failed (rc=$rc). Output:"
+              echo "$output" | head -20
+              if [ $i -lt $retries ]; then
+                echo "Retrying in ${delay}s..."
+                sleep $delay
+              fi
             done
             echo "❌ az aks command invoke failed after $retries attempts"
+            rm -f "$tmpfile"
             return 1
           }
 
@@ -223,6 +242,14 @@ jobs:
             --file .
           cd "$GITHUB_WORKSPACE"
 
+      # Re-login to refresh OIDC token — long-running steps above can exhaust the token
+      - name: Azure Login (refresh)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
       - name: Discover internal LB IP and frontend IP config ID
         id: discover_lb
         if: steps.k8s_deploy.outcome == 'success'
@@ -231,23 +258,53 @@ jobs:
           RG="${{ env.RESOURCE_GROUP }}"
           AKS="demo-aks-dev"
 
+          # Same retry helper for discovery calls
+          invoke_get() {
+            local retries=3
+            local delay=15
+            local tmpfile
+            tmpfile=$(mktemp)
+            for i in $(seq 1 $retries); do
+              set +e
+              az aks command invoke "$@" --query logs -o tsv > "$tmpfile" 2>&1
+              local rc=$?
+              set -e
+              local output
+              output=$(cat "$tmpfile")
+              if [ $rc -eq 0 ] && ! echo "$output" | grep -qiE "AADSTS|Operation returned an invalid"; then
+                echo "$output"
+                rm -f "$tmpfile"
+                return 0
+              fi
+              echo "⚠️  invoke_get attempt $i/$retries failed" >&2
+              [ $i -lt $retries ] && sleep $delay
+            done
+            rm -f "$tmpfile"
+            return 1
+          }
+
           LB_IP=""
-          for i in $(seq 1 24); do
-            LB_IP=$(az aks command invoke \
+          for i in $(seq 1 30); do
+            RAW=$(invoke_get \
               --resource-group "$RG" \
               --name "$AKS" \
               --command "kubectl get svc demo-internal-lb-petstore -n demo-apis -o jsonpath='{.status.loadBalancer.ingress[0].ip}'" \
-              --query "logs" -o tsv | tr -d '[:space:]')
-            if [ -n "$LB_IP" ] && [ "$LB_IP" != "<none>" ] && [[ ! "$LB_IP" =~ Error ]]; then
+              2>/dev/null || true)
+            # Strip whitespace and single quotes from jsonpath output
+            LB_IP=$(echo "$RAW" | tr -d "[:space:]'")
+            if [[ -n "$LB_IP" && "$LB_IP" != "<none>" && "$LB_IP" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
               break
             fi
             LB_IP=""
-            echo "Waiting for LB IP... ($i/24)"
+            echo "Waiting for LB IP... ($i/30)"
             sleep 10
           done
 
           if [ -z "$LB_IP" ]; then
             echo "ERROR: Could not discover internal LB IP from service demo-internal-lb-petstore"
+            echo "Dumping service status for debugging:"
+            invoke_get --resource-group "$RG" --name "$AKS" \
+              --command "kubectl describe svc demo-internal-lb-petstore -n demo-apis" 2>&1 || true
             exit 1
           fi
           echo "Discovered LB IP: $LB_IP"
@@ -279,6 +336,15 @@ jobs:
             --parameters infra/main.bicepparam \
             --parameters aksInternalLbIp="$LB_IP" aksLoadBalancerFrontendIpConfigId="$FRONTEND_IP_CONFIG_ID" \
             --name "gha-deploy-apis-${{ github.run_number }}"
+
+      # Re-login again for PE approval (runs always, previous token may be stale)
+      - name: Azure Login (pre-approval)
+        if: always()
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Approve AFD private endpoint connections on APIM
         if: always()
