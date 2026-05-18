@@ -164,6 +164,17 @@ module aks 'modules/aks/aks.bicep' = {
   }
 }
 
+// 2.1b AKS Network Contributor role on VNet (required for internal LB provisioning)
+resource aksVnetRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(resourceGroup().id, 'aks-network-contributor', '${prefix}-aks-${environment}')
+  scope: resourceGroup()
+  properties: {
+    principalId: aks.outputs.aksPrincipalId
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '4d97b98b-1d4f-4787-a291-c67834d212e7') // Network Contributor
+    principalType: 'ServicePrincipal'
+  }
+}
+
 // 2.2 Private Link Service (deploy after K8s internal LB is provisioned)
 // NOTE: aksLoadBalancerFrontendIpConfigId must be set after deploying K8s services
 // with the azure-load-balancer-internal annotation. This is a two-phase deploy.
