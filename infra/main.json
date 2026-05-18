@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.43.8.12551",
-      "templateHash": "5827472610749884890"
+      "templateHash": "17481547732221335753"
     }
   },
   "parameters": {
@@ -1896,170 +1896,6 @@
     {
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2025-04-01",
-      "name": "deploy-apim-private-endpoint",
-      "properties": {
-        "expressionEvaluationOptions": {
-          "scope": "inner"
-        },
-        "mode": "Incremental",
-        "parameters": {
-          "location": {
-            "value": "[parameters('location')]"
-          },
-          "prefix": {
-            "value": "[parameters('prefix')]"
-          },
-          "environment": {
-            "value": "[parameters('environment')]"
-          },
-          "apimId": {
-            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-apim'), '2025-04-01').outputs.apimId.value]"
-          },
-          "privateEndpointSubnetId": {
-            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-networking'), '2025-04-01').outputs.privateEndpointSubnetId.value]"
-          },
-          "apimDnsZoneId": {
-            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-private-dns-zones'), '2025-04-01').outputs.apimDnsZoneId.value]"
-          },
-          "tags": {
-            "value": "[parameters('tags')]"
-          }
-        },
-        "template": {
-          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
-          "contentVersion": "1.0.0.0",
-          "metadata": {
-            "_generator": {
-              "name": "bicep",
-              "version": "0.43.8.12551",
-              "templateHash": "7757159408810036417"
-            }
-          },
-          "parameters": {
-            "location": {
-              "type": "string",
-              "metadata": {
-                "description": "Azure region"
-              }
-            },
-            "prefix": {
-              "type": "string",
-              "metadata": {
-                "description": "Resource naming prefix"
-              }
-            },
-            "environment": {
-              "type": "string",
-              "metadata": {
-                "description": "Environment name (dev, staging, prod)"
-              }
-            },
-            "apimId": {
-              "type": "string",
-              "metadata": {
-                "description": "Resource ID of the APIM service"
-              }
-            },
-            "privateEndpointSubnetId": {
-              "type": "string",
-              "metadata": {
-                "description": "Resource ID of the subnet for private endpoints"
-              }
-            },
-            "apimDnsZoneId": {
-              "type": "string",
-              "metadata": {
-                "description": "Resource ID of the APIM private DNS zone"
-              }
-            },
-            "tags": {
-              "type": "object",
-              "defaultValue": {},
-              "metadata": {
-                "description": "Tags to apply to resources"
-              }
-            }
-          },
-          "variables": {
-            "privateEndpointName": "[format('{0}-pe-apim-{1}', parameters('prefix'), parameters('environment'))]"
-          },
-          "resources": [
-            {
-              "type": "Microsoft.Network/privateEndpoints",
-              "apiVersion": "2023-11-01",
-              "name": "[variables('privateEndpointName')]",
-              "location": "[parameters('location')]",
-              "tags": "[parameters('tags')]",
-              "properties": {
-                "subnet": {
-                  "id": "[parameters('privateEndpointSubnetId')]"
-                },
-                "privateLinkServiceConnections": [
-                  {
-                    "name": "[format('{0}-connection', variables('privateEndpointName'))]",
-                    "properties": {
-                      "privateLinkServiceId": "[parameters('apimId')]",
-                      "groupIds": [
-                        "Gateway"
-                      ]
-                    }
-                  }
-                ]
-              }
-            },
-            {
-              "type": "Microsoft.Network/privateEndpoints/privateDnsZoneGroups",
-              "apiVersion": "2023-11-01",
-              "name": "[format('{0}/{1}', variables('privateEndpointName'), 'default')]",
-              "properties": {
-                "privateDnsZoneConfigs": [
-                  {
-                    "name": "privatelink-azure-api-net",
-                    "properties": {
-                      "privateDnsZoneId": "[parameters('apimDnsZoneId')]"
-                    }
-                  }
-                ]
-              },
-              "dependsOn": [
-                "[resourceId('Microsoft.Network/privateEndpoints', variables('privateEndpointName'))]"
-              ]
-            }
-          ],
-          "outputs": {
-            "privateEndpointId": {
-              "type": "string",
-              "metadata": {
-                "description": "Resource ID of the APIM private endpoint"
-              },
-              "value": "[resourceId('Microsoft.Network/privateEndpoints', variables('privateEndpointName'))]"
-            },
-            "privateEndpointName": {
-              "type": "string",
-              "metadata": {
-                "description": "Name of the APIM private endpoint"
-              },
-              "value": "[variables('privateEndpointName')]"
-            },
-            "networkInterfaceIds": {
-              "type": "array",
-              "metadata": {
-                "description": "Network interface IDs of the private endpoint"
-              },
-              "value": "[reference(resourceId('Microsoft.Network/privateEndpoints', variables('privateEndpointName')), '2023-11-01').networkInterfaces]"
-            }
-          }
-        }
-      },
-      "dependsOn": [
-        "[resourceId('Microsoft.Resources/deployments', 'deploy-apim')]",
-        "[resourceId('Microsoft.Resources/deployments', 'deploy-networking')]",
-        "[resourceId('Microsoft.Resources/deployments', 'deploy-private-dns-zones')]"
-      ]
-    },
-    {
-      "type": "Microsoft.Resources/deployments",
-      "apiVersion": "2025-04-01",
       "name": "deploy-key-vault-apim-access",
       "properties": {
         "expressionEvaluationOptions": {
@@ -2415,9 +2251,6 @@
           "apimHostname": {
             "value": "[format('{0}.azure-api.net', reference(resourceId('Microsoft.Resources/deployments', 'deploy-apim'), '2025-04-01').outputs.apimName.value)]"
           },
-          "apimPrivateLinkServiceId": {
-            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-apim'), '2025-04-01').outputs.apimId.value]"
-          },
           "tags": {
             "value": "[parameters('tags')]"
           }
@@ -2429,7 +2262,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.43.8.12551",
-              "templateHash": "2891019259925736082"
+              "templateHash": "2869327532117317780"
             }
           },
           "parameters": {
@@ -2455,12 +2288,6 @@
               "type": "string",
               "metadata": {
                 "description": "APIM hostname (e.g., demo-apim-dev.azure-api.net)"
-              }
-            },
-            "apimPrivateLinkServiceId": {
-              "type": "string",
-              "metadata": {
-                "description": "Resource ID of the Private Link Service for APIM PE (used in origin private link config)"
               }
             },
             "tags": {
@@ -2524,7 +2351,7 @@
             {
               "type": "Microsoft.Cdn/profiles/originGroups/origins",
               "apiVersion": "2023-05-01",
-              "name": "[format('{0}/{1}/{2}', variables('afdProfileName'), 'apim-origin-group', 'apim-private-link-origin')]",
+              "name": "[format('{0}/{1}/{2}', variables('afdProfileName'), 'apim-origin-group', 'apim-origin')]",
               "properties": {
                 "hostName": "[parameters('apimHostname')]",
                 "httpPort": 80,
@@ -2532,15 +2359,7 @@
                 "originHostHeader": "[parameters('apimHostname')]",
                 "priority": 1,
                 "weight": 1000,
-                "enabledState": "Enabled",
-                "sharedPrivateLinkResource": {
-                  "privateLink": {
-                    "id": "[parameters('apimPrivateLinkServiceId')]"
-                  },
-                  "groupId": "Gateway",
-                  "privateLinkLocation": "westus2",
-                  "requestMessage": "AFD Private Link connection to APIM"
-                }
+                "enabledState": "Enabled"
               },
               "dependsOn": [
                 "[resourceId('Microsoft.Cdn/profiles/originGroups', variables('afdProfileName'), 'apim-origin-group')]"
@@ -2566,7 +2385,7 @@
               },
               "dependsOn": [
                 "[resourceId('Microsoft.Cdn/profiles/afdEndpoints', variables('afdProfileName'), variables('endpointName'))]",
-                "[resourceId('Microsoft.Cdn/profiles/originGroups/origins', variables('afdProfileName'), 'apim-origin-group', 'apim-private-link-origin')]",
+                "[resourceId('Microsoft.Cdn/profiles/originGroups/origins', variables('afdProfileName'), 'apim-origin-group', 'apim-origin')]",
                 "[resourceId('Microsoft.Cdn/profiles/originGroups', variables('afdProfileName'), 'apim-origin-group')]"
               ]
             },
