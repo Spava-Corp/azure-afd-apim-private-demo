@@ -1,5 +1,6 @@
-// Azure API Management — Internal VNet mode for private backend access
+// Azure API Management — External VNet mode for private backend access
 // Deployed inside the VNet to reach AKS internal LB. AFD connects via Private Endpoint.
+// External mode (not Internal) required because Internal conflicts with existing PE connections.
 // Origin-bypass protection enforced via APIM global inbound policy (X-Azure-FDID validation).
 
 @description('Azure region for APIM')
@@ -49,7 +50,7 @@ resource apimService 'Microsoft.ApiManagement/service@2023-05-01-preview' = {
   properties: {
     publisherEmail: publisherEmail
     publisherName: publisherName
-    virtualNetworkType: 'Internal'
+    virtualNetworkType: 'External'
     publicNetworkAccess: 'Enabled'
     virtualNetworkConfiguration: {
       subnetResourceId: apimSubnetId

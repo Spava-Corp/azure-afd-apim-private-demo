@@ -192,7 +192,7 @@ module aksPrivateLinkService 'modules/aks/private-link-service.bicep' = if (!emp
 
 // ─── Phase 3: API Management ─────────────────────────────────────────────────
 
-// 3.1 APIM Instance (Internal VNet mode for private backend access)
+// 3.1 APIM Instance (External VNet mode for private backend access)
 module apim 'modules/apim/apim.bicep' = {
   name: 'deploy-apim'
   params: {
