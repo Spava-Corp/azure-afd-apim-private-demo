@@ -179,28 +179,49 @@ jobs:
           RG="${{ env.RESOURCE_GROUP }}"
           AKS="demo-aks-dev"
 
-          az aks command invoke \
+          # Retry helper — az aks command invoke has a known bug where it returns
+          # "ERROR: Operation returned an invalid status 'OK'" on success.
+          invoke_with_retry() {
+            local retries=3
+            for i in $(seq 1 $retries); do
+              if "$@"; then
+                return 0
+              fi
+              echo "⚠️  az aks command invoke failed (attempt $i/$retries), retrying in 15s..."
+              sleep 15
+            done
+            echo "❌ az aks command invoke failed after $retries attempts"
+            return 1
+          }
+
+          invoke_with_retry az aks command invoke \
             --resource-group "$RG" \
             --name "$AKS" \
             --command "kubectl create namespace demo-apis --dry-run=client -o yaml | kubectl apply -f -"
 
-          (cd infra/k8s/petstore && az aks command invoke \
+          cd infra/k8s/petstore
+          invoke_with_retry az aks command invoke \
             --resource-group "$RG" \
             --name "$AKS" \
             --command "helm upgrade --install demo-petstore . -n demo-apis --create-namespace --set replicaCount=2 --wait --timeout 300s" \
-            --file .)
+            --file .
+          cd "$GITHUB_WORKSPACE"
 
-          (cd infra/k8s/podinfo && az aks command invoke \
+          cd infra/k8s/podinfo
+          invoke_with_retry az aks command invoke \
             --resource-group "$RG" \
             --name "$AKS" \
             --command "helm upgrade --install demo-podinfo . -n demo-apis --create-namespace --set replicaCount=2 --wait --timeout 300s" \
-            --file .)
+            --file .
+          cd "$GITHUB_WORKSPACE"
 
-          (cd infra/k8s/internal-lb && az aks command invoke \
+          cd infra/k8s/internal-lb
+          invoke_with_retry az aks command invoke \
             --resource-group "$RG" \
             --name "$AKS" \
             --command "helm upgrade --install demo-internal-lb . -n demo-apis --create-namespace --wait --timeout 300s" \
-            --file .)
+            --file .
+          cd "$GITHUB_WORKSPACE"
 
       - name: Discover internal LB IP and frontend IP config ID
         id: discover_lb
