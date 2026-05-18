@@ -203,6 +203,29 @@ jobs:
             for pe_id in $pe_ids; do
               echo "Deleting APIM private endpoint connection: $pe_id"
               az network private-endpoint-connection delete --id "$pe_id" --yes
+
+              for attempt in $(seq 1 30); do
+                if az network private-endpoint-connection show --id "$pe_id" >/dev/null 2>&1; then
+                  pe_state=$(az network private-endpoint-connection show \
+                    --id "$pe_id" \
+                    --query "properties.provisioningState" \
+                    -o tsv 2>/dev/null || true)
+                  pe_status=$(az network private-endpoint-connection show \
+                    --id "$pe_id" \
+                    --query "properties.privateLinkServiceConnectionState.status" \
+                    -o tsv 2>/dev/null || true)
+                  echo "Waiting for APIM private endpoint connection deletion ($attempt/30). provisioningState=${pe_state:-unknown}, status=${pe_status:-unknown}"
+                  sleep 10
+                else
+                  echo "APIM private endpoint connection deletion completed: $pe_id"
+                  break
+                fi
+
+                if [ "$attempt" -eq 30 ]; then
+                  echo "ERROR: Timed out waiting for APIM private endpoint connection deletion: $pe_id"
+                  exit 1
+                fi
+              done
             done
           fi
 
@@ -210,6 +233,35 @@ jobs:
           az network private-endpoint delete \
             --resource-group "$RG" \
             --name "demo-pe-apim-dev" || true
+
+          for attempt in $(seq 1 30); do
+            if az network private-endpoint show \
+              --resource-group "$RG" \
+              --name "demo-pe-apim-dev" >/dev/null 2>&1; then
+              echo "Waiting for standalone APIM private endpoint deletion ($attempt/30)..."
+              sleep 10
+            else
+              echo "Standalone APIM private endpoint deletion completed."
+              break
+            fi
+
+            if [ "$attempt" -eq 30 ]; then
+              echo "ERROR: Timed out waiting for standalone APIM private endpoint deletion: demo-pe-apim-dev"
+              exit 1
+            fi
+          done
+
+          remaining_pe_ids=$(az network private-endpoint-connection list \
+            --resource-group "$RG" \
+            --type Microsoft.ApiManagement/service \
+            --name "$APIM_NAME" \
+            --query "[].id" \
+            -o tsv 2>/dev/null || true)
+
+          if [ -n "$remaining_pe_ids" ]; then
+            echo "ERROR: PE connections still exist after cleanup. Cannot proceed."
+            exit 1
+          fi
 
       - name: Deploy Infrastructure
         run: |
