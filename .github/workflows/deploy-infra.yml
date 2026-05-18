@@ -183,8 +183,8 @@ jobs:
           # az aks command invoke returns exit 0 even when the inner command fails,
           # so we must inspect the logs output for error patterns.
           invoke_with_retry() {
-            local retries=5
-            local delay=20
+            local retries=6
+            local delay=30
             local tmpfile
             tmpfile=$(mktemp)
             for i in $(seq 1 $retries); do
@@ -196,7 +196,7 @@ jobs:
               output=$(cat "$tmpfile")
 
               # Check for known transient/false errors
-              if [ $rc -eq 0 ] && ! echo "$output" | grep -qiE "^Error:|error validating|cluster unreachable|failed to download openapi|AADSTS"; then
+              if [ $rc -eq 0 ] && ! echo "$output" | grep -qiE "^Error:|error validating|cluster unreachable|failed to download openapi|AADSTS|i/o timeout"; then
                 echo "$output"
                 rm -f "$tmpfile"
                 return 0
@@ -213,10 +213,32 @@ jobs:
             return 1
           }
 
+          # Wait for AKS API server to be reachable (Bicep may have triggered a reconciliation)
+          echo "Waiting for AKS API server to become ready..."
+          for i in $(seq 1 15); do
+            set +e
+            HEALTH=$(az aks command invoke \
+              --resource-group "$RG" \
+              --name "$AKS" \
+              --command "kubectl get --raw /readyz" \
+              --query logs -o tsv 2>&1)
+            RC=$?
+            set -e
+            if [ $RC -eq 0 ] && echo "$HEALTH" | grep -q "ok"; then
+              echo "✅ AKS API server is ready (attempt $i/15)"
+              break
+            fi
+            echo "API server not ready yet (attempt $i/15): $(echo "$HEALTH" | head -1)"
+            if [ $i -eq 15 ]; then
+              echo "WARNING: API server did not become ready after 15 attempts, proceeding anyway..."
+            fi
+            sleep 30
+          done
+
           invoke_with_retry az aks command invoke \
             --resource-group "$RG" \
             --name "$AKS" \
-            --command "kubectl create namespace demo-apis --dry-run=client -o yaml | kubectl apply -f -"
+            --command "kubectl create namespace demo-apis --dry-run=client -o yaml | kubectl apply --validate=false -f -"
 
           cd infra/k8s/petstore
           invoke_with_retry az aks command invoke \
