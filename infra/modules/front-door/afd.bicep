@@ -1,5 +1,6 @@
-// Azure Front Door Premium — Profile, Endpoint, Origin Group with Private Link origin
-// AFD connects to APIM via Private Link origin (requires PE connection approval post-deploy)
+// Azure Front Door Premium — Profile, Endpoint, Origin Group
+// AFD routes to APIM's public gateway; APIM's FDID policy ensures only AFD traffic is accepted.
+// This avoids a Private Link connection on APIM, allowing APIM to use External VNet mode for backend connectivity.
 
 @description('Resource naming prefix')
 param prefix string
@@ -12,9 +13,6 @@ param wafPolicyId string
 
 @description('APIM hostname (e.g., demo-apim-dev.azure-api.net)')
 param apimHostname string
-
-@description('Resource ID of the Private Link Service for APIM PE (used in origin private link config)')
-param apimPrivateLinkServiceId string
 
 @description('Tags to apply to resources')
 param tags object = {}
@@ -63,12 +61,10 @@ resource originGroup 'Microsoft.Cdn/profiles/originGroups@2023-05-01' = {
   }
 }
 
-// Private Link Origin pointing to APIM Private Endpoint
-// NOTE: After deployment, the PE connection on APIM will show "Pending" status.
-// It must be manually approved or approved via script for traffic to flow.
+// Origin pointing to APIM public gateway (secured by FDID header validation policy)
 resource origin 'Microsoft.Cdn/profiles/originGroups/origins@2023-05-01' = {
   parent: originGroup
-  name: 'apim-private-link-origin'
+  name: 'apim-origin'
   properties: {
     hostName: apimHostname
     httpPort: 80
@@ -77,14 +73,6 @@ resource origin 'Microsoft.Cdn/profiles/originGroups/origins@2023-05-01' = {
     priority: 1
     weight: 1000
     enabledState: 'Enabled'
-    sharedPrivateLinkResource: {
-      privateLink: {
-        id: apimPrivateLinkServiceId
-      }
-      groupId: 'Gateway'
-      privateLinkLocation: 'westus2'
-      requestMessage: 'AFD Private Link connection to APIM'
-    }
   }
 }
 

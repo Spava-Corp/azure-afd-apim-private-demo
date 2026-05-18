@@ -1,13 +1,14 @@
 // Main Bicep Orchestrator — AFD → APIM → AKS (Private Link) Architecture
 // Deploys all modules in correct dependency order
 //
-// Architecture: Internet → AFD (Premium + WAF) → Private Link → APIM (FDID-validated, public access enabled) → Private Link Service → AKS (Internal LB)
-// All inter-service traffic stays on Azure backbone. APIM public network access is enabled but
-// protected by a global inbound policy that validates the X-Azure-FDID header from Front Door.
+// Architecture: Internet → AFD (Premium + WAF) → APIM (public gateway, FDID-validated, External VNet mode) → AKS (Internal LB)
+// AFD routes to APIM's public endpoint (no Private Link between AFD and APIM).
+// APIM is VNet-injected (External mode) so it can reach the AKS internal load balancer.
+// Security: APIM global inbound policy validates the X-Azure-FDID header from Front Door.
 // Direct APIM access from the internet is blocked at the APIM policy layer.
 //
 // Deployment note: APIM still takes 30-45 minutes to deploy.
-// The CD pipeline auto-approves the AFD Private Endpoint connection; manual approval is for out-of-band deploys.
+// The CD pipeline removes any existing PE connections on APIM before deploying (VNet mode requires no PE).
 
 targetScope = 'resourceGroup'
 
@@ -208,19 +209,9 @@ module apim 'modules/apim/apim.bicep' = {
   }
 }
 
-// 3.2 APIM Private Endpoint (for AFD to connect via Private Link)
-module apimPrivateEndpoint 'modules/apim/apim-private-endpoint.bicep' = {
-  name: 'deploy-apim-private-endpoint'
-  params: {
-    location: location
-    prefix: prefix
-    environment: environment
-    apimId: apim.outputs.apimId
-    privateEndpointSubnetId: networking.outputs.privateEndpointSubnetId
-    apimDnsZoneId: privateDnsZones.outputs.apimDnsZoneId
-    tags: tags
-  }
-}
+// 3.2 (APIM Private Endpoint removed — AFD connects to APIM's public gateway instead,
+//      which allows APIM to use External VNet mode for backend connectivity to AKS.
+//      Security is maintained by the FDID header validation policy on APIM.)
 
 // 3.3 Key Vault access for APIM managed identity
 module keyVaultWithApimAccess 'modules/security/key-vault.bicep' = {
@@ -249,7 +240,7 @@ module wafPolicy 'modules/front-door/waf-policy.bicep' = {
   }
 }
 
-// 4.2 AFD Profile + Endpoint + Origin Group + Private Link Origin
+// 4.2 AFD Profile + Endpoint + Origin Group (public origin to APIM, secured by FDID policy)
 module frontDoor 'modules/front-door/afd.bicep' = {
   name: 'deploy-front-door'
   params: {
@@ -257,7 +248,6 @@ module frontDoor 'modules/front-door/afd.bicep' = {
     environment: environment
     wafPolicyId: wafPolicy.outputs.wafPolicyId
     apimHostname: '${apim.outputs.apimName}.azure-api.net'
-    apimPrivateLinkServiceId: apim.outputs.apimId
     tags: tags
   }
 }
