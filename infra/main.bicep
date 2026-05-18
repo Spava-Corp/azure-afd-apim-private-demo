@@ -1,14 +1,13 @@
 // Main Bicep Orchestrator — AFD → APIM → AKS (Private Link) Architecture
 // Deploys all modules in correct dependency order
 //
-// Architecture: Internet → AFD (Premium + WAF) → APIM (public gateway, FDID-validated, External VNet mode) → AKS (Internal LB)
-// AFD routes to APIM's public endpoint (no Private Link between AFD and APIM).
-// APIM is VNet-injected (External mode) so it can reach the AKS internal load balancer.
-// Security: APIM global inbound policy validates the X-Azure-FDID header from Front Door.
-// Direct APIM access from the internet is blocked at the APIM policy layer.
+// Architecture: Internet → AFD (Premium + WAF) → Shared Private Link → APIM (Internal VNet mode, private-only gateway) → AKS (Internal LB)
+// APIM is VNet-injected so it can reach the AKS internal load balancer without exposing a public gateway.
+// AFD uses Shared Private Link to the APIM Gateway endpoint, and APIM still validates X-Azure-FDID as defense in depth.
+// The retained apim-private-endpoint module now manages private DNS for the internal APIM gateway rather than creating a customer-managed PE.
 //
 // Deployment note: APIM still takes 30-45 minutes to deploy.
-// The CD pipeline removes any existing PE connections on APIM before deploying (VNet mode requires no PE).
+// Existing APIM private endpoint connections are compatible with Internal mode, so no PE cleanup step is required.
 
 targetScope = 'resourceGroup'
 
@@ -193,7 +192,7 @@ module aksPrivateLinkService 'modules/aks/private-link-service.bicep' = if (!emp
 
 // ─── Phase 3: API Management ─────────────────────────────────────────────────
 
-// 3.1 APIM Instance (External VNet mode for private backend access)
+// 3.1 APIM Instance (Internal VNet mode for private-only gateway access)
 module apim 'modules/apim/apim.bicep' = {
   name: 'deploy-apim'
   params: {
@@ -209,9 +208,15 @@ module apim 'modules/apim/apim.bicep' = {
   }
 }
 
-// 3.2 (APIM Private Endpoint removed — AFD connects to APIM's public gateway instead,
-//      which allows APIM to use External VNet mode for backend connectivity to AKS.
-//      Security is maintained by the FDID header validation policy on APIM.)
+// 3.2 APIM private gateway DNS record for Internal mode
+module apimPrivateEndpoint 'modules/apim/apim-private-endpoint.bicep' = {
+  name: 'deploy-apim-private-endpoint'
+  params: {
+    apimName: apim.outputs.apimName
+    apimPrivateIpAddresses: apim.outputs.apimPrivateIpAddresses
+    apimDnsZoneId: privateDnsZones.outputs.apimDnsZoneId
+  }
+}
 
 // 3.3 Key Vault access for APIM managed identity
 module keyVaultWithApimAccess 'modules/security/key-vault.bicep' = {
@@ -240,7 +245,7 @@ module wafPolicy 'modules/front-door/waf-policy.bicep' = {
   }
 }
 
-// 4.2 AFD Profile + Endpoint + Origin Group (public origin to APIM, secured by FDID policy)
+// 4.2 AFD Profile + Endpoint + Origin Group (Shared Private Link origin to APIM)
 module frontDoor 'modules/front-door/afd.bicep' = {
   name: 'deploy-front-door'
   params: {
@@ -248,6 +253,7 @@ module frontDoor 'modules/front-door/afd.bicep' = {
     environment: environment
     wafPolicyId: wafPolicy.outputs.wafPolicyId
     apimHostname: '${apim.outputs.apimName}.azure-api.net'
+    apimId: apim.outputs.apimId
     tags: tags
   }
 }
@@ -284,7 +290,7 @@ output afdEndpointUrl string = 'https://${frontDoor.outputs.afdEndpointHostname}
 @description('AFD Front Door ID — used for X-Azure-FDID header validation on APIM')
 output afdFrontDoorId string = frontDoor.outputs.afdFrontDoorId
 
-@description('APIM gateway URL (FDID-validated ingress)')
+@description('APIM gateway URL (private-only gateway)')
 output apimGatewayUrl string = apim.outputs.apimGatewayUrl
 
 @description('AKS cluster name')
@@ -297,4 +303,4 @@ output keyVaultUri string = keyVault.outputs.keyVaultUri
 output logAnalyticsWorkspaceId string = logAnalytics.outputs.workspaceId
 
 @description('Post-deployment reminder')
-output postDeployNote string = 'IMPORTANT: The CD pipeline auto-approves the AFD Private Endpoint connection on APIM. If you deploy outside the pipeline, approve it manually. Deploy K8s services with internal LB annotation, then re-deploy with aksLoadBalancerFrontendIpConfigId set.'
+output postDeployNote string = 'IMPORTANT: Internal-mode APIM is private-only. Approve the pending AFD Shared Private Link connection on APIM if you deploy outside the pipeline, then deploy K8s services with the internal LB annotation and re-deploy with aksLoadBalancerFrontendIpConfigId set.'

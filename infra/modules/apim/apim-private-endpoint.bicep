@@ -1,72 +1,30 @@
-// Private Endpoint for APIM — enables AFD Private Link origin to reach APIM
-// This PE is what AFD's managed VNet connects to via Private Link
+// APIM private gateway DNS wiring for Internal VNet mode
+// AFD creates the managed private endpoint through Shared Private Link; this module only publishes
+// the APIM gateway's private IP into the VNet-linked azure-api.net private DNS zone.
 
-@description('Azure region')
-param location string
+@description('APIM service name')
+param apimName string
 
-@description('Resource naming prefix')
-param prefix string
-
-@description('Environment name (dev, staging, prod)')
-param environment string
-
-@description('Resource ID of the APIM service')
-param apimId string
-
-@description('Resource ID of the subnet for private endpoints')
-param privateEndpointSubnetId string
+@description('Private IP addresses assigned to the APIM gateway')
+param apimPrivateIpAddresses array
 
 @description('Resource ID of the APIM private DNS zone')
 param apimDnsZoneId string
 
-@description('Tags to apply to resources')
-param tags object = {}
+resource apimDnsZone 'Microsoft.Network/privateDnsZones@2020-06-01' existing = {
+  name: last(split(apimDnsZoneId, '/'))
+}
 
-var privateEndpointName = '${prefix}-pe-apim-${environment}'
-
-resource apimPrivateEndpoint 'Microsoft.Network/privateEndpoints@2023-11-01' = {
-  name: privateEndpointName
-  location: location
-  tags: tags
+resource gatewayRecord 'Microsoft.Network/privateDnsZones/A@2020-06-01' = if (length(apimPrivateIpAddresses) > 0) {
+  parent: apimDnsZone
+  name: apimName
   properties: {
-    subnet: {
-      id: privateEndpointSubnetId
-    }
-    privateLinkServiceConnections: [
-      {
-        name: '${privateEndpointName}-connection'
-        properties: {
-          privateLinkServiceId: apimId
-          groupIds: [
-            'Gateway'
-          ]
-        }
-      }
-    ]
+    ttl: 300
+    aRecords: [for ip in apimPrivateIpAddresses: {
+      ipv4Address: ip
+    }]
   }
 }
 
-// DNS zone group for automatic A record registration
-resource privateDnsZoneGroup 'Microsoft.Network/privateEndpoints/privateDnsZoneGroups@2023-11-01' = {
-  parent: apimPrivateEndpoint
-  name: 'default'
-  properties: {
-    privateDnsZoneConfigs: [
-      {
-        name: 'privatelink-azure-api-net'
-        properties: {
-          privateDnsZoneId: apimDnsZoneId
-        }
-      }
-    ]
-  }
-}
-
-@description('Resource ID of the APIM private endpoint')
-output privateEndpointId string = apimPrivateEndpoint.id
-
-@description('Name of the APIM private endpoint')
-output privateEndpointName string = apimPrivateEndpoint.name
-
-@description('Network interface IDs of the private endpoint')
-output networkInterfaceIds array = apimPrivateEndpoint.properties.networkInterfaces
+@description('Resource ID of the APIM private DNS A record')
+output gatewayRecordId string = length(apimPrivateIpAddresses) > 0 ? gatewayRecord.id : ''

@@ -1,7 +1,6 @@
-// Azure API Management — External VNet mode for private backend access
-// Deployed inside the VNet to reach AKS internal LB. AFD connects via Private Endpoint.
-// External mode (not Internal) required because Internal conflicts with existing PE connections.
-// Origin-bypass protection enforced via APIM global inbound policy (X-Azure-FDID validation).
+// Azure API Management — Internal VNet mode for private-only gateway access
+// Deployed inside the VNet so APIM can reach the AKS internal LB without any public gateway exposure.
+// Azure Front Door connects through Shared Private Link, while APIM keeps the FDID validation policy as defense in depth.
 
 @description('Azure region for APIM')
 param location string
@@ -50,8 +49,8 @@ resource apimService 'Microsoft.ApiManagement/service@2023-05-01-preview' = {
   properties: {
     publisherEmail: publisherEmail
     publisherName: publisherName
-    virtualNetworkType: 'External'
-    publicNetworkAccess: 'Enabled'
+    virtualNetworkType: 'Internal'
+    publicNetworkAccess: 'Disabled'
     virtualNetworkConfiguration: {
       subnetResourceId: apimSubnetId
     }
@@ -85,10 +84,10 @@ output apimId string = apimService.id
 @description('Name of the APIM service')
 output apimName string = apimService.name
 
-@description('Private IP addresses of APIM when VNet-integrated; empty when using Private Endpoint-only connectivity')
+@description('Private IP addresses assigned to APIM in Internal VNet mode')
 output apimPrivateIpAddresses array = apimService.properties.?privateIPAddresses ?? []
 
-@description('APIM gateway URL')
+@description('APIM gateway URL (private-only in Internal VNet mode)')
 output apimGatewayUrl string = apimService.properties.gatewayUrl
 
 @description('System-assigned managed identity principal ID')

@@ -1,5 +1,5 @@
 // Private DNS Zones linked to VNet
-// Required for private endpoint name resolution within the VNet
+// Required for private-only service name resolution within the VNet
 
 @description('Resource ID of the VNet to link DNS zones to')
 param vnetId string
@@ -7,9 +7,9 @@ param vnetId string
 @description('Tags to apply to resources')
 param tags object = {}
 
-// Private DNS zone for APIM (azure-api.net)
+// Private DNS zone for APIM internal gateway resolution
 resource apimDnsZone 'Microsoft.Network/privateDnsZones@2020-06-01' = {
-  name: 'privatelink.azure-api.net'
+  name: 'azure-api.net'
   location: 'global'
   tags: tags
 }

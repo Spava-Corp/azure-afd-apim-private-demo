@@ -1,6 +1,6 @@
 // Azure Front Door Premium — Profile, Endpoint, Origin Group
-// AFD routes to APIM's public gateway; APIM's FDID policy ensures only AFD traffic is accepted.
-// This avoids a Private Link connection on APIM, allowing APIM to use External VNet mode for backend connectivity.
+// AFD reaches APIM through Shared Private Link so the APIM gateway stays private-only in Internal VNet mode.
+// APIM still validates the X-Azure-FDID header as defense in depth.
 
 @description('Resource naming prefix')
 param prefix string
@@ -13,6 +13,9 @@ param wafPolicyId string
 
 @description('APIM hostname (e.g., demo-apim-dev.azure-api.net)')
 param apimHostname string
+
+@description('Resource ID of the APIM service for Shared Private Link')
+param apimId string
 
 @description('Tags to apply to resources')
 param tags object = {}
@@ -61,9 +64,8 @@ resource originGroup 'Microsoft.Cdn/profiles/originGroups@2023-05-01' = {
   }
 }
 
-// Origin pointing to APIM public gateway (secured by FDID header validation policy)
+// Origin pointing to APIM gateway through Shared Private Link
 // Name kept as 'apim-private-link-origin' to update existing resource in-place
-// (removes sharedPrivateLinkResource that was causing 504s via stale PL connection)
 resource origin 'Microsoft.Cdn/profiles/originGroups/origins@2023-05-01' = {
   parent: originGroup
   name: 'apim-private-link-origin'
@@ -75,6 +77,14 @@ resource origin 'Microsoft.Cdn/profiles/originGroups/origins@2023-05-01' = {
     priority: 1
     weight: 1000
     enabledState: 'Enabled'
+    sharedPrivateLinkResource: {
+      groupId: 'Gateway'
+      privateLink: {
+        id: apimId
+      }
+      privateLinkLocation: resourceGroup().location
+      requestMessage: 'AFD Private Link to APIM'
+    }
   }
 }
 

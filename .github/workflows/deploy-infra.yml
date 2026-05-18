@@ -173,104 +173,6 @@ jobs:
           echo "Current Kubernetes version: $CURRENT_K8S_VERSION"
           echo "CURRENT_K8S_VERSION=$CURRENT_K8S_VERSION" >> "$GITHUB_ENV"
 
-      - name: Remove APIM private endpoint connections (required for VNet mode)
-        run: |
-          set -euo pipefail
-          # APIM cannot switch to External VNet mode while PE connections exist.
-          # Remove any existing PE connections and the PE resource before deploying.
-          APIM_NAME=$(az resource list \
-            --resource-group "${{ env.RESOURCE_GROUP }}" \
-            --resource-type Microsoft.ApiManagement/service \
-            --query "[?starts_with(name,'demo-apim-dev')].name" -o tsv 2>/dev/null || true)
-
-          if [ -z "$APIM_NAME" ]; then
-            echo "No APIM instance found yet; skipping PE cleanup."
-          else
-            echo "Checking PE connections on $APIM_NAME..."
-            pe_ids=$(az network private-endpoint-connection list \
-              --resource-group "${{ env.RESOURCE_GROUP }}" \
-              --type Microsoft.ApiManagement/service \
-              --name "$APIM_NAME" \
-              --query "[].id" -o tsv 2>/dev/null || true)
-
-            if [ -z "$pe_ids" ]; then
-              echo "No PE connections found on APIM."
-            else
-              for pe_id in $pe_ids; do
-                echo "Deleting PE connection: $pe_id"
-                az network private-endpoint-connection delete --id "$pe_id" --yes 2>&1 || true
-              done
-              echo "PE connections removed."
-            fi
-          fi
-
-          # Also delete the standalone PE resource if it exists
-          PE_NAME="demo-pe-apim-dev"
-          if az network private-endpoint show \
-            --resource-group "${{ env.RESOURCE_GROUP }}" \
-            --name "$PE_NAME" &>/dev/null; then
-            echo "Deleting PE resource $PE_NAME..."
-            az network private-endpoint delete \
-              --resource-group "${{ env.RESOURCE_GROUP }}" \
-              --name "$PE_NAME"
-            echo "PE resource deleted."
-          else
-            echo "No PE resource $PE_NAME found; nothing to clean up."
-          fi
-
-      - name: Remove stale AFD Private Link origin
-        run: |
-          set -euo pipefail
-          # The AFD origin has a sharedPrivateLinkResource from a previous deployment.
-          # This creates a PE on APIM which blocks VNet mode. We must DELETE the origin
-          # entirely — az afd origin update cannot clear the shared PL field.
-          # Bicep will recreate the origin cleanly without a PL.
-          AFD_PROFILE=$(az afd profile list \
-            --resource-group "${{ env.RESOURCE_GROUP }}" \
-            --query "[?starts_with(name,'demo-afd-dev')].name" -o tsv 2>/dev/null || true)
-
-          if [ -z "$AFD_PROFILE" ]; then
-            echo "No AFD profile found yet; skipping origin PL cleanup."
-          else
-            echo "Checking AFD origin for stale Private Link on profile: $AFD_PROFILE"
-            ORIGIN_PL=$(az afd origin show \
-              --resource-group "${{ env.RESOURCE_GROUP }}" \
-              --profile-name "$AFD_PROFILE" \
-              --origin-group-name apim-origin-group \
-              --origin-name apim-private-link-origin \
-              --query "sharedPrivateLinkResource.privateLink.id" -o tsv 2>/dev/null || true)
-
-            if [ -n "$ORIGIN_PL" ]; then
-              echo "Stale PL found on AFD origin. Deleting origin so Bicep can recreate cleanly..."
-              az afd origin delete \
-                --resource-group "${{ env.RESOURCE_GROUP }}" \
-                --profile-name "$AFD_PROFILE" \
-                --origin-group-name apim-origin-group \
-                --origin-name apim-private-link-origin \
-                --yes 2>&1 || echo "Warning: origin delete failed"
-              echo "Waiting 30s for PE cleanup to propagate to APIM..."
-              sleep 30
-              # Re-run APIM PE cleanup since deleting AFD origin removes the PE asynchronously
-              APIM_NAME=$(az resource list \
-                --resource-group "${{ env.RESOURCE_GROUP }}" \
-                --resource-type Microsoft.ApiManagement/service \
-                --query "[?starts_with(name,'demo-apim-dev')].name" -o tsv 2>/dev/null || true)
-              if [ -n "$APIM_NAME" ]; then
-                pe_ids=$(az network private-endpoint-connection list \
-                  --resource-group "${{ env.RESOURCE_GROUP }}" \
-                  --type Microsoft.ApiManagement/service \
-                  --name "$APIM_NAME" \
-                  --query "[].id" -o tsv 2>/dev/null || true)
-                for pe_id in $pe_ids; do
-                  echo "Cleaning residual PE connection: $pe_id"
-                  az network private-endpoint-connection delete --id "$pe_id" --yes 2>&1 || true
-                done
-              fi
-            else
-              echo "No stale Private Link on AFD origin — origin is clean."
-            fi
-          fi
-
       - name: Deploy Infrastructure
         run: |
           # Pass current K8s version to Bicep to prevent version mismatch/downgrade
@@ -284,6 +186,54 @@ jobs:
             --parameters infra/main.bicepparam \
             $EXTRA_PARAMS \
             --name "gha-deploy-${{ github.run_number }}"
+
+      - name: Approve AFD Private Link connection on APIM
+        run: |
+          set -euo pipefail
+          RG="${{ env.RESOURCE_GROUP }}"
+          APIM_NAME=$(az resource list \
+            --resource-group "$RG" \
+            --resource-type Microsoft.ApiManagement/service \
+            --query "[?starts_with(name,'demo-apim-dev')].name" \
+            -o tsv 2>/dev/null || true)
+
+          if [ -z "$APIM_NAME" ]; then
+            echo "No APIM instance found in $RG; skipping PE approval."
+            exit 0
+          fi
+
+          echo "Checking pending Private Link connections on APIM: $APIM_NAME"
+          pending_ids=""
+          for i in $(seq 1 24); do
+            pending_ids=$(az network private-endpoint-connection list \
+              --resource-group "$RG" \
+              --type Microsoft.ApiManagement/service \
+              --name "$APIM_NAME" \
+              --query "[?properties.privateLinkServiceConnectionState.status=='Pending'].id" \
+              -o tsv 2>/dev/null || true)
+
+            if [ -n "$pending_ids" ]; then
+              echo "Found pending Private Link connection(s) on attempt $i/24."
+              break
+            fi
+
+            if [ $i -lt 24 ]; then
+              echo "No pending APIM Private Link connections yet (attempt $i/24); waiting 5s..."
+              sleep 5
+            fi
+          done
+
+          if [ -z "$pending_ids" ]; then
+            echo "No pending APIM Private Link connections found; nothing to approve."
+            exit 0
+          fi
+
+          for pe_id in $pending_ids; do
+            echo "Approving Private Link connection: $pe_id"
+            az network private-endpoint-connection approve \
+              --id "$pe_id" \
+              --description "Approved by CD pipeline for AFD Private Link"
+          done
 
       - name: Ensure AKS API server is healthy
         run: |
@@ -506,3 +456,48 @@ jobs:
             --parameters infra/main.bicepparam \
             --parameters aksInternalLbIp="$LB_IP" aksLoadBalancerFrontendIpConfigId="$FRONTEND_IP_CONFIG_ID" \
             --name "gha-deploy-apis-${{ github.run_number }}"
+
+      - name: Smoke test AFD endpoint
+        if: steps.discover_lb.outcome == 'success'
+        run: |
+          set -euo pipefail
+          RG="${{ env.RESOURCE_GROUP }}"
+          AFD_URL=$(az deployment group show \
+            --resource-group "$RG" \
+            --name "gha-deploy-apis-${{ github.run_number }}" \
+            --query "properties.outputs.afdEndpointUrl.value" \
+            -o tsv 2>/dev/null || true)
+
+          if [ -z "$AFD_URL" ]; then
+            AFD_URL=$(az deployment group show \
+              --resource-group "$RG" \
+              --name "gha-deploy-${{ github.run_number }}" \
+              --query "properties.outputs.afdEndpointUrl.value" \
+              -o tsv 2>/dev/null || true)
+          fi
+
+          if [ -z "$AFD_URL" ]; then
+            echo "Unable to determine AFD endpoint URL for smoke test."
+            exit 1
+          fi
+
+          echo "Smoke testing ${AFD_URL}/healthz with retry for Private Link propagation..."
+          for i in $(seq 1 20); do
+            set +e
+            HTTP_CODE=$(curl -sS -o /dev/null -w "%{http_code}" "${AFD_URL}/healthz")
+            RC=$?
+            set -e
+
+            if [ $RC -eq 0 ] && [ "$HTTP_CODE" = "200" ]; then
+              echo "✅ Smoke test passed on attempt $i/20."
+              exit 0
+            fi
+
+            echo "Smoke test attempt $i/20 returned ${HTTP_CODE:-curl-error}; waiting 15s..."
+            if [ $i -lt 20 ]; then
+              sleep 15
+            fi
+          done
+
+          echo "Smoke test failed: ${AFD_URL}/healthz did not return HTTP 200 in time."
+          exit 1

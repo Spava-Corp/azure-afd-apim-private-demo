@@ -4,8 +4,8 @@
   "metadata": {
     "_generator": {
       "name": "bicep",
-      "version": "0.43.8.12551",
-      "templateHash": "4087814101517153593"
+      "version": "0.42.1.51946",
+      "templateHash": "17698745382101973253"
     }
   },
   "parameters": {
@@ -213,8 +213,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.43.8.12551",
-              "templateHash": "10499185893036737495"
+              "version": "0.42.1.51946",
+              "templateHash": "5298728997577386948"
             }
           },
           "parameters": {
@@ -360,8 +360,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.43.8.12551",
-              "templateHash": "5371090658666308473"
+              "version": "0.42.1.51946",
+              "templateHash": "5819272406800594424"
             }
           },
           "parameters": {
@@ -1039,8 +1039,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.43.8.12551",
-              "templateHash": "17034892790159660631"
+              "version": "0.42.1.51946",
+              "templateHash": "15084905892740163384"
             }
           },
           "parameters": {
@@ -1062,7 +1062,7 @@
             {
               "type": "Microsoft.Network/privateDnsZones",
               "apiVersion": "2020-06-01",
-              "name": "privatelink.azure-api.net",
+              "name": "azure-api.net",
               "location": "global",
               "tags": "[parameters('tags')]"
             },
@@ -1076,7 +1076,7 @@
             {
               "type": "Microsoft.Network/privateDnsZones/virtualNetworkLinks",
               "apiVersion": "2020-06-01",
-              "name": "[format('{0}/{1}', 'privatelink.azure-api.net', 'link-apim')]",
+              "name": "[format('{0}/{1}', 'azure-api.net', 'link-apim')]",
               "location": "global",
               "tags": "[parameters('tags')]",
               "properties": {
@@ -1086,7 +1086,7 @@
                 "registrationEnabled": false
               },
               "dependsOn": [
-                "[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.azure-api.net')]"
+                "[resourceId('Microsoft.Network/privateDnsZones', 'azure-api.net')]"
               ]
             },
             {
@@ -1135,7 +1135,7 @@
               "metadata": {
                 "description": "Resource ID of the APIM private DNS zone"
               },
-              "value": "[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.azure-api.net')]"
+              "value": "[resourceId('Microsoft.Network/privateDnsZones', 'azure-api.net')]"
             },
             "keyVaultDnsZoneId": {
               "type": "string",
@@ -1187,8 +1187,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.43.8.12551",
-              "templateHash": "5626218360697562766"
+              "version": "0.42.1.51946",
+              "templateHash": "7601883051760901723"
             }
           },
           "parameters": {
@@ -1360,8 +1360,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.43.8.12551",
-              "templateHash": "16012052588285352605"
+              "version": "0.42.1.51946",
+              "templateHash": "12353327468469023590"
             }
           },
           "parameters": {
@@ -1564,8 +1564,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.43.8.12551",
-              "templateHash": "6474809318973335034"
+              "version": "0.42.1.51946",
+              "templateHash": "18387285666724379304"
             }
           },
           "parameters": {
@@ -1723,8 +1723,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.43.8.12551",
-              "templateHash": "14500053645882568454"
+              "version": "0.42.1.51946",
+              "templateHash": "11039307105789842563"
             }
           },
           "parameters": {
@@ -1817,8 +1817,8 @@
               "properties": {
                 "publisherEmail": "[parameters('publisherEmail')]",
                 "publisherName": "[parameters('publisherName')]",
-                "virtualNetworkType": "External",
-                "publicNetworkAccess": "Enabled",
+                "virtualNetworkType": "Internal",
+                "publicNetworkAccess": "Disabled",
                 "virtualNetworkConfiguration": {
                   "subnetResourceId": "[parameters('apimSubnetId')]"
                 }
@@ -1867,14 +1867,14 @@
             "apimPrivateIpAddresses": {
               "type": "array",
               "metadata": {
-                "description": "Private IP addresses of APIM when VNet-integrated; empty when using Private Endpoint-only connectivity"
+                "description": "Private IP addresses assigned to APIM in Internal VNet mode"
               },
               "value": "[coalesce(tryGet(reference(resourceId('Microsoft.ApiManagement/service', variables('apimName')), '2023-05-01-preview'), 'privateIPAddresses'), createArray())]"
             },
             "apimGatewayUrl": {
               "type": "string",
               "metadata": {
-                "description": "APIM gateway URL"
+                "description": "APIM gateway URL (private-only in Internal VNet mode)"
               },
               "value": "[reference(resourceId('Microsoft.ApiManagement/service', variables('apimName')), '2023-05-01-preview').gatewayUrl]"
             },
@@ -1891,6 +1891,92 @@
       "dependsOn": [
         "[resourceId('Microsoft.Resources/deployments', 'deploy-log-analytics')]",
         "[resourceId('Microsoft.Resources/deployments', 'deploy-networking')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "deploy-apim-private-endpoint",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "apimName": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-apim'), '2025-04-01').outputs.apimName.value]"
+          },
+          "apimPrivateIpAddresses": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-apim'), '2025-04-01').outputs.apimPrivateIpAddresses.value]"
+          },
+          "apimDnsZoneId": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-private-dns-zones'), '2025-04-01').outputs.apimDnsZoneId.value]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.42.1.51946",
+              "templateHash": "9227022746561089256"
+            }
+          },
+          "parameters": {
+            "apimName": {
+              "type": "string",
+              "metadata": {
+                "description": "APIM service name"
+              }
+            },
+            "apimPrivateIpAddresses": {
+              "type": "array",
+              "metadata": {
+                "description": "Private IP addresses assigned to the APIM gateway"
+              }
+            },
+            "apimDnsZoneId": {
+              "type": "string",
+              "metadata": {
+                "description": "Resource ID of the APIM private DNS zone"
+              }
+            }
+          },
+          "resources": [
+            {
+              "condition": "[greater(length(parameters('apimPrivateIpAddresses')), 0)]",
+              "type": "Microsoft.Network/privateDnsZones/A",
+              "apiVersion": "2020-06-01",
+              "name": "[format('{0}/{1}', last(split(parameters('apimDnsZoneId'), '/')), parameters('apimName'))]",
+              "properties": {
+                "copy": [
+                  {
+                    "name": "aRecords",
+                    "count": "[length(parameters('apimPrivateIpAddresses'))]",
+                    "input": {
+                      "ipv4Address": "[parameters('apimPrivateIpAddresses')[copyIndex('aRecords')]]"
+                    }
+                  }
+                ],
+                "ttl": 300
+              }
+            }
+          ],
+          "outputs": {
+            "gatewayRecordId": {
+              "type": "string",
+              "metadata": {
+                "description": "Resource ID of the APIM private DNS A record"
+              },
+              "value": "[if(greater(length(parameters('apimPrivateIpAddresses')), 0), resourceId('Microsoft.Network/privateDnsZones/A', last(split(parameters('apimDnsZoneId'), '/')), parameters('apimName')), '')]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Resources/deployments', 'deploy-apim')]",
+        "[resourceId('Microsoft.Resources/deployments', 'deploy-private-dns-zones')]"
       ]
     },
     {
@@ -1925,8 +2011,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.43.8.12551",
-              "templateHash": "5626218360697562766"
+              "version": "0.42.1.51946",
+              "templateHash": "7601883051760901723"
             }
           },
           "parameters": {
@@ -2092,8 +2178,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.43.8.12551",
-              "templateHash": "3005782595406279488"
+              "version": "0.42.1.51946",
+              "templateHash": "13607097063193257108"
             }
           },
           "parameters": {
@@ -2251,6 +2337,9 @@
           "apimHostname": {
             "value": "[format('{0}.azure-api.net', reference(resourceId('Microsoft.Resources/deployments', 'deploy-apim'), '2025-04-01').outputs.apimName.value)]"
           },
+          "apimId": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-apim'), '2025-04-01').outputs.apimId.value]"
+          },
           "tags": {
             "value": "[parameters('tags')]"
           }
@@ -2261,8 +2350,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.43.8.12551",
-              "templateHash": "7031162060534094628"
+              "version": "0.42.1.51946",
+              "templateHash": "10590702503336512891"
             }
           },
           "parameters": {
@@ -2288,6 +2377,12 @@
               "type": "string",
               "metadata": {
                 "description": "APIM hostname (e.g., demo-apim-dev.azure-api.net)"
+              }
+            },
+            "apimId": {
+              "type": "string",
+              "metadata": {
+                "description": "Resource ID of the APIM service for Shared Private Link"
               }
             },
             "tags": {
@@ -2359,7 +2454,15 @@
                 "originHostHeader": "[parameters('apimHostname')]",
                 "priority": 1,
                 "weight": 1000,
-                "enabledState": "Enabled"
+                "enabledState": "Enabled",
+                "sharedPrivateLinkResource": {
+                  "groupId": "Gateway",
+                  "privateLink": {
+                    "id": "[parameters('apimId')]"
+                  },
+                  "privateLinkLocation": "[resourceGroup().location]",
+                  "requestMessage": "AFD Private Link to APIM"
+                }
               },
               "dependsOn": [
                 "[resourceId('Microsoft.Cdn/profiles/originGroups', variables('afdProfileName'), 'apim-origin-group')]"
@@ -2479,8 +2582,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.43.8.12551",
-              "templateHash": "454700172393500367"
+              "version": "0.42.1.51946",
+              "templateHash": "11336874101679972200"
             }
           },
           "parameters": {
@@ -2498,7 +2601,7 @@
             }
           },
           "variables": {
-            "policyXml": "[replace('<policies>\n  <inbound>\n    <check-header name=\"X-Azure-FDID\" failed-check-httpcode=\"403\" failed-check-error-message=\"Access denied - request must arrive through Azure Front Door.\" ignore-case=\"true\">\n      <value>__FDID__</value>\n    </check-header>\n  </inbound>\n  <backend />\n  <outbound />\n  <on-error />\n</policies>', '__FDID__', parameters('frontDoorId'))]"
+            "policyXml": "[replace('<policies>\r\n  <inbound>\r\n    <check-header name=\"X-Azure-FDID\" failed-check-httpcode=\"403\" failed-check-error-message=\"Access denied - request must arrive through Azure Front Door.\" ignore-case=\"true\">\r\n      <value>__FDID__</value>\r\n    </check-header>\r\n  </inbound>\r\n  <backend />\r\n  <outbound />\r\n  <on-error />\r\n</policies>', '__FDID__', parameters('frontDoorId'))]"
           },
           "resources": [
             {
@@ -2542,8 +2645,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.43.8.12551",
-              "templateHash": "12552713607522844822"
+              "version": "0.42.1.51946",
+              "templateHash": "16268266661241783249"
             }
           },
           "parameters": {
@@ -2689,7 +2792,7 @@
     "apimGatewayUrl": {
       "type": "string",
       "metadata": {
-        "description": "APIM gateway URL (FDID-validated ingress)"
+        "description": "APIM gateway URL (private-only gateway)"
       },
       "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-apim'), '2025-04-01').outputs.apimGatewayUrl.value]"
     },
@@ -2719,7 +2822,7 @@
       "metadata": {
         "description": "Post-deployment reminder"
       },
-      "value": "IMPORTANT: The CD pipeline auto-approves the AFD Private Endpoint connection on APIM. If you deploy outside the pipeline, approve it manually. Deploy K8s services with internal LB annotation, then re-deploy with aksLoadBalancerFrontendIpConfigId set."
+      "value": "IMPORTANT: Internal-mode APIM is private-only. Approve the pending AFD Shared Private Link connection on APIM if you deploy outside the pipeline, then deploy K8s services with the internal LB annotation and re-deploy with aksLoadBalancerFrontendIpConfigId set."
     }
   }
 }
