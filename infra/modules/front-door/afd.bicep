@@ -62,9 +62,11 @@ resource originGroup 'Microsoft.Cdn/profiles/originGroups@2023-05-01' = {
 }
 
 // Origin pointing to APIM public gateway (secured by FDID header validation policy)
+// Name kept as 'apim-private-link-origin' to update existing resource in-place
+// (removes sharedPrivateLinkResource that was causing 504s via stale PL connection)
 resource origin 'Microsoft.Cdn/profiles/originGroups/origins@2023-05-01' = {
   parent: originGroup
-  name: 'apim-origin'
+  name: 'apim-private-link-origin'
   properties: {
     hostName: apimHostname
     httpPort: 80

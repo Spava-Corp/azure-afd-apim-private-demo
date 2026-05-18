@@ -218,6 +218,41 @@ jobs:
             echo "No PE resource $PE_NAME found; nothing to clean up."
           fi
 
+      - name: Remove stale AFD Private Link origin
+        run: |
+          set -euo pipefail
+          # The AFD origin may still have a sharedPrivateLinkResource from a previous
+          # deployment. This causes 504s because AFD tries to route via a deleted PL.
+          # Force-update the origin to remove the shared private link resource.
+          AFD_PROFILE=$(az afd profile list \
+            --resource-group "${{ env.RESOURCE_GROUP }}" \
+            --query "[?starts_with(name,'demo-afd-dev')].name" -o tsv 2>/dev/null || true)
+
+          if [ -z "$AFD_PROFILE" ]; then
+            echo "No AFD profile found yet; skipping origin PL cleanup."
+          else
+            echo "Checking AFD origin for stale Private Link on profile: $AFD_PROFILE"
+            ORIGIN_PL=$(az afd origin show \
+              --resource-group "${{ env.RESOURCE_GROUP }}" \
+              --profile-name "$AFD_PROFILE" \
+              --origin-group-name apim-origin-group \
+              --origin-name apim-private-link-origin \
+              --query "sharedPrivateLinkResource" -o tsv 2>/dev/null || true)
+
+            if [ -n "$ORIGIN_PL" ] && [ "$ORIGIN_PL" != "None" ]; then
+              echo "Stale PL found on AFD origin. Updating origin to remove it..."
+              az afd origin update \
+                --resource-group "${{ env.RESOURCE_GROUP }}" \
+                --profile-name "$AFD_PROFILE" \
+                --origin-group-name apim-origin-group \
+                --origin-name apim-private-link-origin \
+                --shared-private-link-resource "" \
+                2>&1 || echo "Warning: origin update failed, Bicep will handle it"
+            else
+              echo "No stale Private Link on AFD origin."
+            fi
+          fi
+
       - name: Deploy Infrastructure
         run: |
           # Pass current K8s version to Bicep to prevent version mismatch/downgrade
