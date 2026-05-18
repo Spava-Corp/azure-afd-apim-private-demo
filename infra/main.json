@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.43.8.12551",
-      "templateHash": "3249037523095629063"
+      "templateHash": "5827472610749884890"
     }
   },
   "parameters": {
@@ -1724,7 +1724,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.43.8.12551",
-              "templateHash": "12174305526094364813"
+              "templateHash": "14500053645882568454"
             }
           },
           "parameters": {
@@ -1817,7 +1817,7 @@
               "properties": {
                 "publisherEmail": "[parameters('publisherEmail')]",
                 "publisherName": "[parameters('publisherName')]",
-                "virtualNetworkType": "Internal",
+                "virtualNetworkType": "External",
                 "publicNetworkAccess": "Enabled",
                 "virtualNetworkConfiguration": {
                   "subnetResourceId": "[parameters('apimSubnetId')]"
