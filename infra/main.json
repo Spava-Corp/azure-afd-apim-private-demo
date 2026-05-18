@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.43.8.12551",
-      "templateHash": "10939220772240929288"
+      "templateHash": "3249037523095629063"
     }
   },
   "parameters": {
@@ -1710,6 +1710,9 @@
           "workspaceId": {
             "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-log-analytics'), '2025-04-01').outputs.workspaceId.value]"
           },
+          "apimSubnetId": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'deploy-networking'), '2025-04-01').outputs.apimSubnetId.value]"
+          },
           "tags": {
             "value": "[parameters('tags')]"
           }
@@ -1721,7 +1724,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.43.8.12551",
-              "templateHash": "5296249158831977587"
+              "templateHash": "12174305526094364813"
             }
           },
           "parameters": {
@@ -1780,6 +1783,12 @@
                 "description": "Log Analytics workspace resource ID for diagnostics"
               }
             },
+            "apimSubnetId": {
+              "type": "string",
+              "metadata": {
+                "description": "Resource ID of the APIM subnet for VNet integration"
+              }
+            },
             "tags": {
               "type": "object",
               "defaultValue": {},
@@ -1808,8 +1817,11 @@
               "properties": {
                 "publisherEmail": "[parameters('publisherEmail')]",
                 "publisherName": "[parameters('publisherName')]",
-                "virtualNetworkType": "None",
-                "publicNetworkAccess": "Enabled"
+                "virtualNetworkType": "Internal",
+                "publicNetworkAccess": "Enabled",
+                "virtualNetworkConfiguration": {
+                  "subnetResourceId": "[parameters('apimSubnetId')]"
+                }
               }
             },
             {
@@ -1877,7 +1889,8 @@
         }
       },
       "dependsOn": [
-        "[resourceId('Microsoft.Resources/deployments', 'deploy-log-analytics')]"
+        "[resourceId('Microsoft.Resources/deployments', 'deploy-log-analytics')]",
+        "[resourceId('Microsoft.Resources/deployments', 'deploy-networking')]"
       ]
     },
     {
