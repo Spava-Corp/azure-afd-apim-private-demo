@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.43.8.12551",
-      "templateHash": "17481547732221335753"
+      "templateHash": "4087814101517153593"
     }
   },
   "parameters": {
@@ -2262,7 +2262,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.43.8.12551",
-              "templateHash": "2869327532117317780"
+              "templateHash": "7031162060534094628"
             }
           },
           "parameters": {
@@ -2351,7 +2351,7 @@
             {
               "type": "Microsoft.Cdn/profiles/originGroups/origins",
               "apiVersion": "2023-05-01",
-              "name": "[format('{0}/{1}/{2}', variables('afdProfileName'), 'apim-origin-group', 'apim-origin')]",
+              "name": "[format('{0}/{1}/{2}', variables('afdProfileName'), 'apim-origin-group', 'apim-private-link-origin')]",
               "properties": {
                 "hostName": "[parameters('apimHostname')]",
                 "httpPort": 80,
@@ -2385,7 +2385,7 @@
               },
               "dependsOn": [
                 "[resourceId('Microsoft.Cdn/profiles/afdEndpoints', variables('afdProfileName'), variables('endpointName'))]",
-                "[resourceId('Microsoft.Cdn/profiles/originGroups/origins', variables('afdProfileName'), 'apim-origin-group', 'apim-origin')]",
+                "[resourceId('Microsoft.Cdn/profiles/originGroups/origins', variables('afdProfileName'), 'apim-origin-group', 'apim-private-link-origin')]",
                 "[resourceId('Microsoft.Cdn/profiles/originGroups', variables('afdProfileName'), 'apim-origin-group')]"
               ]
             },
