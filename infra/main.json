@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.43.8.12551",
-      "templateHash": "2097682263090676620"
+      "templateHash": "10939220772240929288"
     }
   },
   "parameters": {
@@ -361,7 +361,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.43.8.12551",
-              "templateHash": "7494981141338829500"
+              "templateHash": "5371090658666308473"
             }
           },
           "parameters": {
@@ -936,6 +936,7 @@
                       "networkSecurityGroup": {
                         "id": "[resourceId('Microsoft.Network/networkSecurityGroups', variables('aksNsgName'))]"
                       },
+                      "privateLinkServiceNetworkPolicies": "Disabled",
                       "delegations": []
                     }
                   },
