@@ -173,6 +173,44 @@ jobs:
           echo "Current Kubernetes version: $CURRENT_K8S_VERSION"
           echo "CURRENT_K8S_VERSION=$CURRENT_K8S_VERSION" >> "$GITHUB_ENV"
 
+      - name: Remove APIM private endpoint connections
+        run: |
+          set -euo pipefail
+          RG="${{ env.RESOURCE_GROUP }}"
+          APIM_NAME=$(az resource list \
+            --resource-group "$RG" \
+            --resource-type Microsoft.ApiManagement/service \
+            --query "[?starts_with(name,'demo-apim-dev')].name" \
+            -o tsv 2>/dev/null || true)
+
+          if [ -z "$APIM_NAME" ]; then
+            echo "No APIM instance found in $RG; skipping PE cleanup."
+            exit 0
+          fi
+
+          # One-time transitional cleanup for the APIM VNet mode migration: Azure
+          # blocks switching APIM to Internal mode while legacy PE connections exist.
+          pe_ids=$(az network private-endpoint-connection list \
+            --resource-group "$RG" \
+            --type Microsoft.ApiManagement/service \
+            --name "$APIM_NAME" \
+            --query "[].id" \
+            -o tsv 2>/dev/null || true)
+
+          if [ -z "$pe_ids" ]; then
+            echo "No APIM private endpoint connections found; nothing to remove."
+          else
+            for pe_id in $pe_ids; do
+              echo "Deleting APIM private endpoint connection: $pe_id"
+              az network private-endpoint-connection delete --id "$pe_id" --yes
+            done
+          fi
+
+          echo "Deleting standalone APIM private endpoint resource if present..."
+          az network private-endpoint delete \
+            --resource-group "$RG" \
+            --name "demo-pe-apim-dev" || true
+
       - name: Deploy Infrastructure
         run: |
           # Pass current K8s version to Bicep to prevent version mismatch/downgrade
