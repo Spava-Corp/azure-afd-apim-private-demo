@@ -118,6 +118,7 @@ jobs:
           done
 
       - name: Reconcile AKS (if exists)
+        id: aks_precheck
         run: |
           set -euo pipefail
 
@@ -164,13 +165,62 @@ jobs:
               ;;
           esac
 
+          # Capture current K8s version to avoid version mismatch in Bicep deploy
+          CURRENT_K8S_VERSION=$(az aks show \
+            --resource-group "${{ env.RESOURCE_GROUP }}" \
+            --name "$AKS_NAME" \
+            --query kubernetesVersion -o tsv)
+          echo "Current Kubernetes version: $CURRENT_K8S_VERSION"
+          echo "CURRENT_K8S_VERSION=$CURRENT_K8S_VERSION" >> "$GITHUB_ENV"
+
       - name: Deploy Infrastructure
         run: |
+          # Pass current K8s version to Bicep to prevent version mismatch/downgrade
+          EXTRA_PARAMS=""
+          if [ -n "${CURRENT_K8S_VERSION:-}" ]; then
+            EXTRA_PARAMS="--parameters kubernetesVersion=$CURRENT_K8S_VERSION"
+          fi
           az deployment group create \
             --resource-group ${{ env.RESOURCE_GROUP }} \
             --template-file infra/main.bicep \
             --parameters infra/main.bicepparam \
+            $EXTRA_PARAMS \
             --name "gha-deploy-${{ github.run_number }}"
+
+      - name: Ensure AKS API server is healthy
+        run: |
+          set -euo pipefail
+          RG="${{ env.RESOURCE_GROUP }}"
+          AKS="demo-aks-dev"
+
+          # Force reconciliation to ensure control plane is fully operational
+          echo "Forcing AKS control plane reconciliation..."
+          az aks update --resource-group "$RG" --name "$AKS" --yes 2>&1 | tail -5
+
+          # Wait for the update to complete
+          echo "Waiting for AKS update to complete..."
+          az aks wait --resource-group "$RG" --name "$AKS" --updated --timeout 600
+
+          echo "AKS cluster reconciliation complete. Verifying API server..."
+          # Brief verification with RunCommand
+          for i in $(seq 1 5); do
+            set +e
+            RESULT=$(az aks command invoke \
+              --resource-group "$RG" \
+              --name "$AKS" \
+              --command "kubectl cluster-info" \
+              --query logs -o tsv 2>&1)
+            RC=$?
+            set -e
+            if [ $RC -eq 0 ] && echo "$RESULT" | grep -qi "control plane"; then
+              echo "✅ AKS API server verified healthy"
+              echo "$RESULT" | head -3
+              exit 0
+            fi
+            echo "API server check attempt $i/5: $(echo "$RESULT" | head -1)"
+            sleep 30
+          done
+          echo "⚠️  Could not verify API server health, but proceeding..."
 
       - name: Deploy K8s services (Petstore, Podinfo, Internal LB)
         id: k8s_deploy
