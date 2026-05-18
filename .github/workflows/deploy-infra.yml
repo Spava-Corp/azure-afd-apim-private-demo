@@ -188,68 +188,60 @@ jobs:
             exit 0
           fi
 
-          # One-time transitional cleanup for the APIM VNet mode migration: Azure
-          # blocks switching APIM to Internal mode while legacy PE connections exist.
-          pe_ids=$(az network private-endpoint-connection list \
+          delete_private_endpoint() {
+            local pe_name="$1"
+
+            if [ -z "$pe_name" ]; then
+              return 0
+            fi
+
+            if ! az network private-endpoint show \
+              --resource-group "$RG" \
+              --name "$pe_name" >/dev/null 2>/dev/null; then
+              echo "Private endpoint resource not found; nothing to delete: $pe_name"
+              return 0
+            fi
+
+            echo "Deleting private endpoint resource: $pe_name"
+            az network private-endpoint delete \
+              --resource-group "$RG" \
+              --name "$pe_name" \
+              --yes || true
+
+            for attempt in $(seq 1 30); do
+              if az network private-endpoint show \
+                --resource-group "$RG" \
+                --name "$pe_name" >/dev/null 2>/dev/null; then
+                echo "Waiting for private endpoint resource deletion ($attempt/30): $pe_name"
+                sleep 10
+              else
+                echo "Private endpoint resource deleted: $pe_name"
+                return 0
+              fi
+            done
+
+            echo "ERROR: Timed out waiting for private endpoint resource deletion: $pe_name"
+            exit 1
+          }
+
+          delete_private_endpoint "demo-pe-apim-dev"
+
+          additional_pe_names=$(az network private-endpoint list \
             --resource-group "$RG" \
-            --type Microsoft.ApiManagement/service \
-            --name "$APIM_NAME" \
-            --query "[].id" \
+            --query "[?contains(privateLinkServiceConnections[0].privateLinkServiceId || customDnsConfigs[0].fqdn || '', 'apim') || contains(name, 'apim')].name" \
             -o tsv 2>/dev/null || true)
 
-          if [ -z "$pe_ids" ]; then
-            echo "No APIM private endpoint connections found; nothing to remove."
-          else
-            for pe_id in $pe_ids; do
-              echo "Deleting APIM private endpoint connection: $pe_id"
-              az network private-endpoint-connection delete --id "$pe_id" --yes
+          if [ -n "$additional_pe_names" ]; then
+            for pe_name in $additional_pe_names; do
+              if [ "$pe_name" = "demo-pe-apim-dev" ]; then
+                continue
+              fi
 
-              for attempt in $(seq 1 30); do
-                if az network private-endpoint-connection show --id "$pe_id" >/dev/null 2>&1; then
-                  pe_state=$(az network private-endpoint-connection show \
-                    --id "$pe_id" \
-                    --query "properties.provisioningState" \
-                    -o tsv 2>/dev/null || true)
-                  pe_status=$(az network private-endpoint-connection show \
-                    --id "$pe_id" \
-                    --query "properties.privateLinkServiceConnectionState.status" \
-                    -o tsv 2>/dev/null || true)
-                  echo "Waiting for APIM private endpoint connection deletion ($attempt/30). provisioningState=${pe_state:-unknown}, status=${pe_status:-unknown}"
-                  sleep 10
-                else
-                  echo "APIM private endpoint connection deletion completed: $pe_id"
-                  break
-                fi
-
-                if [ "$attempt" -eq 30 ]; then
-                  echo "ERROR: Timed out waiting for APIM private endpoint connection deletion: $pe_id"
-                  exit 1
-                fi
-              done
+              delete_private_endpoint "$pe_name"
             done
+          else
+            echo "No additional APIM-targeting private endpoint resources found."
           fi
-
-          echo "Deleting standalone APIM private endpoint resource if present..."
-          az network private-endpoint delete \
-            --resource-group "$RG" \
-            --name "demo-pe-apim-dev" || true
-
-          for attempt in $(seq 1 30); do
-            if az network private-endpoint show \
-              --resource-group "$RG" \
-              --name "demo-pe-apim-dev" >/dev/null 2>&1; then
-              echo "Waiting for standalone APIM private endpoint deletion ($attempt/30)..."
-              sleep 10
-            else
-              echo "Standalone APIM private endpoint deletion completed."
-              break
-            fi
-
-            if [ "$attempt" -eq 30 ]; then
-              echo "ERROR: Timed out waiting for standalone APIM private endpoint deletion: demo-pe-apim-dev"
-              exit 1
-            fi
-          done
 
           remaining_pe_ids=$(az network private-endpoint-connection list \
             --resource-group "$RG" \
@@ -258,10 +250,37 @@ jobs:
             --query "[].id" \
             -o tsv 2>/dev/null || true)
 
-          if [ -n "$remaining_pe_ids" ]; then
-            echo "ERROR: PE connections still exist after cleanup. Cannot proceed."
-            exit 1
+          if [ -z "$remaining_pe_ids" ]; then
+            echo "No APIM private endpoint connections remain after resource cleanup."
+            exit 0
           fi
+
+          echo "APIM private endpoint connections remain after resource cleanup; attempting explicit deletion."
+          for pe_id in $remaining_pe_ids; do
+            echo "Deleting APIM private endpoint connection: $pe_id"
+            az network private-endpoint-connection delete --id "$pe_id" --yes
+          done
+
+          for attempt in $(seq 1 12); do
+            remaining_pe_ids=$(az network private-endpoint-connection list \
+              --resource-group "$RG" \
+              --type Microsoft.ApiManagement/service \
+              --name "$APIM_NAME" \
+              --query "[].id" \
+              -o tsv 2>/dev/null || true)
+
+            if [ -z "$remaining_pe_ids" ]; then
+              echo "APIM private endpoint connections deleted successfully."
+              exit 0
+            fi
+
+            echo "Waiting for APIM private endpoint connection cleanup ($attempt/12)..."
+            sleep 10
+          done
+
+          echo "ERROR: APIM private endpoint connections still exist after deleting private endpoint resources and waiting 2 minutes."
+          printf '%s\n' "$remaining_pe_ids"
+          exit 1
 
       - name: Deploy Infrastructure
         run: |
