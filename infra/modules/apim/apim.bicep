@@ -1,6 +1,6 @@
-// Azure API Management — X-Azure-FDID validated ingress, stv2 platform
-// Public network access is enabled but protected by a global inbound policy
-// that rejects any request not carrying the correct AFD profile ID header.
+// Azure API Management — Internal VNet mode for private backend access
+// Deployed inside the VNet to reach AKS internal LB. AFD connects via Private Endpoint.
+// Origin-bypass protection enforced via APIM global inbound policy (X-Azure-FDID validation).
 
 @description('Azure region for APIM')
 param location string
@@ -27,6 +27,9 @@ param skuCapacity int = 1
 @description('Log Analytics workspace resource ID for diagnostics')
 param workspaceId string
 
+@description('Resource ID of the APIM subnet for VNet integration')
+param apimSubnetId string
+
 @description('Tags to apply to resources')
 param tags object = {}
 
@@ -46,12 +49,11 @@ resource apimService 'Microsoft.ApiManagement/service@2023-05-01-preview' = {
   properties: {
     publisherEmail: publisherEmail
     publisherName: publisherName
-    virtualNetworkType: 'None'
+    virtualNetworkType: 'Internal'
     publicNetworkAccess: 'Enabled'
-    // Fallback mode: publicNetworkAccess re-enabled because AFD shared Private Link
-    // health probes fail on Developer SKU when public access is fully disabled.
-    // Origin-bypass protection is enforced via APIM global inbound policy (X-Azure-FDID
-    // header validation) and WAF custom rule. See docs/decisions/apim-network-access.md.
+    virtualNetworkConfiguration: {
+      subnetResourceId: apimSubnetId
+    }
   }
 }
 
